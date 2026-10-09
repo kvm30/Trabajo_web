@@ -1,6 +1,6 @@
 # Sistema de Votación en Vivo con Auditoría Criptográfica
 
-Express + PostgreSQL + Socket.IO + JWT + Swagger. El front está en `public/` y lo sirve el mismo servidor.
+Express + PostgreSQL + Socket.IO + JWT + Swagger. El front está en `../frontend/` y lo sirve el mismo servidor.
 
 ## Arranque
 Desde la raíz del repositorio, entra primero a la carpeta `backend`:
