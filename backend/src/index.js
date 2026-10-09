@@ -1,6 +1,5 @@
 require('dotenv').config();
 const http = require('http');
-const os = require('os');
 const path = require('path');
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
@@ -11,7 +10,6 @@ const socket = require('./socket');
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public'))); // Frontend
@@ -27,16 +25,9 @@ socket.init(server);
 async function start() {
   try {
     await runMigrations();
-    server.listen(PORT, HOST, () => {
-      console.log(`App + API local en http://localhost:${PORT}`);
-      console.log(`Swagger local en   http://localhost:${PORT}/api-docs`);
-      for (const interfaces of Object.values(os.networkInterfaces())) {
-        for (const network of interfaces || []) {
-          if (network.family === 'IPv4' && !network.internal) {
-            console.log(`App + API en red en http://${network.address}:${PORT}`);
-          }
-        }
-      }
+    server.listen(PORT, () => {
+      console.log(`App + API en http://localhost:${PORT}`);
+      console.log(`Swagger en   http://localhost:${PORT}/api-docs`);
     });
   } catch (err) {
     console.error('Error al iniciar:', err.message);
