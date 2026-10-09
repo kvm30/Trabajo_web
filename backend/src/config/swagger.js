@@ -13,8 +13,8 @@ const options = {
     },
     servers: [
       {
-        url: `http://localhost:${process.env.PORT || 3000}`,
-        description: 'Servidor local',
+        url: '/',
+        description: 'Servidor actual',
       },
     ],
   },

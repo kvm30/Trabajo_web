@@ -1,5 +1,41 @@
 # Sistema de votación
 
-El backend de la aplicación, incluyendo su esquema y migraciones de PostgreSQL, está en [`backend/`](./backend/).
+## Estructura del proyecto
 
-Consulta las [instrucciones de instalación y ejecución](./backend/README.md).
+```text
+.
+├── backend/
+│   ├── src/
+│   │   ├── config/
+│   │   ├── controllers/
+│   │   ├── middleware/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   └── utils/
+│   ├── .env.example
+│   ├── package.json
+│   └── README.md
+├── frontend/
+│   ├── css/
+│   ├── js/
+│   │   └── views/
+│   └── index.html
+├── render.yaml
+└── README.md
+```
+
+El **backend** contiene la API, la lógica del servidor y las migraciones de PostgreSQL. El **frontend** contiene la interfaz web estática, que el servidor entrega junto con la API.
+
+Consulta las [instrucciones del backend](./backend/README.md) para instalar y ejecutar el sitio localmente.
+
+## Publicar para acceder desde Internet
+
+El archivo [`render.yaml`](./render.yaml) configura el despliegue del frontend, el backend y una base de datos PostgreSQL en Render.
+
+1. Sube este repositorio a GitHub y crea una cuenta en [Render](https://render.com/).
+2. En Render, crea un **Blueprint** y conecta el repositorio.
+3. Cuando Render lo solicite, define `ADMIN_PASSWORD` con una contraseña segura para la cuenta administradora.
+4. Confirma la creación de los recursos. La base de datos definida usa el plan `basic-256mb`, que es de pago.
+5. Al terminar el despliegue, abre la URL pública del servicio. Esa misma dirección funciona desde celulares y computadoras con acceso a Internet.
+
+Render configura el puerto, las credenciales de PostgreSQL y el secreto de sesión automáticamente. No publiques el archivo `backend/.env` ni compartas las credenciales de administrador. Para conservar los votos, mantén activa la base de datos de pago; no la elimines desde Render.

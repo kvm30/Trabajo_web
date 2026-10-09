@@ -1,0 +1,42 @@
+databases:
+  - name: backweb-db
+    databaseName: backweb_db
+    user: backweb_user
+    plan: basic-256mb
+
+services:
+  - type: web
+    name: backweb
+    runtime: node
+    buildCommand: npm ci --prefix backend
+    startCommand: npm --prefix backend start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_HOST
+        fromDatabase:
+          name: backweb-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: backweb-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: backweb-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: backweb-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: backweb-db
+          property: password
+      - key: ADMIN_EMAIL
+        value: admin@votacion.com
+      - key: ADMIN_PASSWORD
+        sync: false
