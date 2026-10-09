@@ -2,6 +2,27 @@
 
 Express + PostgreSQL + Socket.IO + JWT + Swagger. El front está en `public/` y lo sirve el mismo servidor.
 
+## Estructura del frontend
+
+El frontend usa JavaScript nativo con módulos ES y no requiere compilación:
+
+```text
+public/
+├── index.html
+├── css/
+│   └── styles.css
+└── js/
+    ├── app.js              # Navegación, sesión y eventos Socket.IO
+    ├── api.js              # Comunicación con la API
+    ├── utils.js            # Utilidades compartidas de interfaz
+    └── views/              # Pantallas por funcionalidad
+        ├── admin.js
+        ├── detail.js
+        ├── elections.js
+        ├── login.js
+        └── verify.js
+```
+
 ## Arranque
 Desde la raíz del repositorio, entra primero a la carpeta `backend`:
 `cd backend`
