@@ -4,6 +4,8 @@
 
 ```text
 .
+├── package.json              # Workspaces y comandos para frontend/backend
+├── package-lock.json         # Dependencias bloqueadas del proyecto
 ├── backend/
 │   ├── src/
 │   │   ├── config/
@@ -20,15 +22,35 @@
 │   │   └── components/
 │   ├── css/
 │   ├── index.html
-│   ├── package.json
+│   ├── package.json          # Aplicación Vue 3
 │   └── vite.config.js
 ├── render.yaml
 └── README.md
 ```
 
-El **backend** contiene la API, la lógica del servidor y las migraciones de PostgreSQL. El **frontend** está construido con Vue 3 y Vite; el backend sirve los archivos compilados desde `frontend/dist`.
+La raíz administra el proyecto como un monorepo npm: contiene los comandos comunes y coordina los workspaces `backend/` y `frontend/`. El **backend** contiene la API, la lógica del servidor y las migraciones de PostgreSQL. El **frontend** está construido con Vue 3 y Vite; el backend sirve los archivos compilados desde `frontend/dist`.
 
-Consulta las [instrucciones del backend](./backend/README.md) para instalar, compilar y ejecutar el sitio localmente.
+## Ejecutar localmente
+
+1. Instala Node.js y PostgreSQL.
+2. Crea la base de datos `backweb_db` y configura las variables en `backend/.env` (puedes usar `backend/.env.example` como guía).
+3. Desde la raíz del proyecto, instala dependencias y arranca frontend y backend:
+
+   ```powershell
+   npm install
+   npm run dev
+   ```
+
+4. Abre http://localhost:5173 para usar la interfaz de desarrollo. Vite conecta la API y Socket.IO con el backend en http://localhost:3000.
+
+Para compilar el frontend y ejecutar la aplicación servida por Express:
+
+```powershell
+npm run build
+npm start
+```
+
+La aplicación estará disponible en http://localhost:3000. Consulta las [instrucciones del backend](./backend/README.md) para detalles de configuración.
 
 ## Publicar para acceder desde Internet
 

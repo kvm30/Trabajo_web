@@ -8,8 +8,8 @@ services:
   - type: web
     name: backweb
     runtime: node
-    buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend
-    startCommand: npm --prefix backend start
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV

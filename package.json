@@ -1,0 +1,19 @@
+{
+  "name": "sistema-votacion",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n backend,frontend \"npm run dev --workspace=backweb\" \"npm run dev --workspace=votacion-frontend\"",
+    "dev:backend": "npm run dev --workspace=backweb",
+    "dev:frontend": "npm run dev --workspace=votacion-frontend",
+    "build": "npm run build --workspace=votacion-frontend",
+    "start": "npm run start --workspace=backweb"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
