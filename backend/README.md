@@ -1,38 +1,34 @@
 # Sistema de Votación en Vivo con Auditoría Criptográfica
 
-Express + PostgreSQL + Socket.IO + JWT + Swagger. El frontend está en `../frontend/` y lo sirve el mismo servidor.
+Express + PostgreSQL + Socket.IO + JWT + Swagger. El frontend está en `../frontend/`, está construido con Vue 3 y Vite, y lo sirve el mismo servidor desde `../frontend/dist/`.
 
 ## Estructura del frontend
 
-El frontend usa JavaScript nativo con módulos ES y no requiere compilación:
-
 ```text
 frontend/
+├── src/
+│   ├── components/           # Pantallas Vue
+│   ├── App.vue               # Navegación, sesión y eventos Socket.IO
+│   └── api.js                # Comunicación con la API
+├── css/styles.css
 ├── index.html
-├── css/
-│   └── styles.css
-└── js/
-    ├── app.js              # Navegación, sesión y eventos Socket.IO
-    ├── api.js              # Comunicación con la API
-    ├── utils.js            # Utilidades compartidas de interfaz
-    └── views/              # Pantallas por funcionalidad
-        ├── admin.js
-        ├── detail.js
-        ├── elections.js
-        ├── login.js
-        └── verify.js
+└── vite.config.js            # Proxy de API y Socket.IO para desarrollo
 ```
 
 ## Arranque
 1. En DBeaver crea la base: `CREATE DATABASE backweb_db;` (o el nombre que pongas en `.env`)
 2. Ajusta `.env` (guía en `.env.example`): `DB_PASSWORD`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`
-3. Desde la raíz del proyecto, instala las dependencias y ejecuta el servidor:
+3. Desde la raíz del proyecto, instala las dependencias, compila el frontend y ejecuta el servidor:
    ```powershell
    npm --prefix .\backend install
+   npm --prefix .\frontend install
+   npm --prefix .\frontend run build
    npm --prefix .\backend run dev
    ```
-4. App: http://localhost:3000 · Swagger: http://localhost:3000/api-docs
+4. Abre http://localhost:3000 · Swagger: http://localhost:3000/api-docs
 5. Las tablas se crean solas al arrancar y se crea el usuario admin.
+
+Para desarrollar la interfaz con Vite y recarga en caliente, inicia también `npm --prefix .\frontend run dev` en otra terminal. Vite usa el backend en `http://localhost:3000` como proxy para la API y Socket.IO.
 
 ## Publicación en Internet
 

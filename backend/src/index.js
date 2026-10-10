@@ -20,7 +20,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
 }
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
+app.use(express.static(path.join(__dirname, '..', '..', 'frontend', 'dist')));
 
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });

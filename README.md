@@ -16,17 +16,19 @@
 │   ├── package.json
 │   └── README.md
 ├── frontend/
+│   ├── src/
+│   │   └── components/
 │   ├── css/
-│   ├── js/
-│   │   └── views/
-│   └── index.html
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
 ├── render.yaml
 └── README.md
 ```
 
-El **backend** contiene la API, la lógica del servidor y las migraciones de PostgreSQL. El **frontend** contiene la interfaz web estática, que el servidor entrega junto con la API.
+El **backend** contiene la API, la lógica del servidor y las migraciones de PostgreSQL. El **frontend** está construido con Vue 3 y Vite; el backend sirve los archivos compilados desde `frontend/dist`.
 
-Consulta las [instrucciones del backend](./backend/README.md) para instalar y ejecutar el sitio localmente.
+Consulta las [instrucciones del backend](./backend/README.md) para instalar, compilar y ejecutar el sitio localmente.
 
 ## Publicar para acceder desde Internet
 
