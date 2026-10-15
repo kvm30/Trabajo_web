@@ -9,7 +9,7 @@ defineProps({
 <template>
   <header>
     <h1>🗳️ Votación en Vivo</h1>
-    <nav>
+    <nav aria-label="Navegación principal">
       <button class="ghost" @click="go('elections')">Elecciones</button>
       <button class="ghost" @click="go('verify')">Verificar comprobante</button>
       <button v-if="session?.user.role === 'admin'" class="ghost" @click="go('admin')">Admin</button>

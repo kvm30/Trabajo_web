@@ -5,6 +5,7 @@ const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const runMigrations = require('./config/migrate');
+const ElectionModel = require('./models/election.model');
 const socket = require('./socket');
 
 const app = express();
@@ -42,6 +43,16 @@ socket.init(server);
 async function start() {
   try {
     await runMigrations();
+    const refreshScheduledElections = async () => {
+      const changedIds = await ElectionModel.refreshScheduledStatuses();
+      if (changedIds.length) socket.emitElectionsChanged();
+    };
+    await refreshScheduledElections();
+    setInterval(() => {
+      refreshScheduledElections().catch((err) => {
+        console.error('Error al actualizar estados programados:', err.message);
+      });
+    }, 30_000);
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`App + API escuchando en el puerto ${PORT}`);
       console.log(`Swagger disponible en /api-docs`);
