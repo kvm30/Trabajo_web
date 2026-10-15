@@ -19,8 +19,12 @@
 │   └── README.md
 ├── frontend/
 │   ├── src/
-│   │   └── components/
-│   ├── css/
+│   │   ├── assets/           # Estilos globales y recursos estáticos
+│   │   ├── components/       # Componentes reutilizables
+│   │   ├── layouts/          # Estructuras compartidas de las páginas
+│   │   ├── router/           # Rutas de Vue Router
+│   │   ├── services/         # Comunicación con la API
+│   │   └── views/            # Páginas de la aplicación
 │   ├── index.html
 │   ├── package.json          # Aplicación Vue 3
 │   └── vite.config.js

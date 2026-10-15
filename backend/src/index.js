@@ -32,6 +32,11 @@ app.use('/api/users', require('./routes/user.routes'));
 app.use('/api/elections', require('./routes/election.routes'));
 app.use('/api/audit', require('./routes/audit.routes'));
 
+app.get('*', (req, res, next) => {
+  if (req.path === '/api' || req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html'));
+});
+
 socket.init(server);
 
 async function start() {
