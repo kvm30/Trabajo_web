@@ -36,4 +36,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .skip-link:focus{top:12px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:600px){header{align-items:flex-start;padding:14px 16px}nav{width:100%}nav button{flex:1 1 auto}main{margin:16px auto;padding:0 12px}.card{padding:14px}.election-filters input,.election-filters select{margin-bottom:10px}}
+html{min-width:320px}
+body{min-width:320px;overflow-x:hidden}
+main{width:100%}
+.row>*{min-width:0}
+button,.btn{min-height:44px}
+@media(max-width:600px){
+  header{gap:14px}
+  header h1{overflow-wrap:anywhere}
+  nav{gap:8px}
+  nav button{flex:1 1 140px}
+  nav>span{flex:1 1 100%}
+  .row.between{align-items:flex-start}
+  .row.between>h2,.row.between>h3{overflow-wrap:anywhere}
+  .hash{overflow-wrap:anywhere}
+}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
