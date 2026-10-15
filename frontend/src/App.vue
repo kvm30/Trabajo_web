@@ -22,6 +22,30 @@ const pageKey = computed(() => `${route.name}:${route.params.id ?? ''}:${route.q
 let toastTimer;
 let currentRoom = null;
 const socket = io();
+const api = createApi(() => session.value, logout);
+
+const pageProps = computed(() => {
+  if (route.name === 'detail') {
+    return {
+      api,
+      view: view.value,
+      session: session.value,
+      go,
+      toast,
+      joinRoom,
+      liveResults: liveResults.value,
+      refreshKey: refreshKey.value,
+    };
+  }
+  if (route.name === 'login' || route.name === 'register') {
+    return { api, view: view.value, go, setSession };
+  }
+  if (route.name === 'verify') return { api, view: view.value };
+  if (route.name === 'admin') {
+    return { api, session: session.value, go, toast, refreshKey: refreshKey.value };
+  }
+  return { api, go, refreshKey: refreshKey.value };
+});
 
 function go(name, extra = {}) {
   if (name === 'detail') {
@@ -59,8 +83,6 @@ function joinRoom(id) {
   currentRoom = id;
   if (id) socket.emit('join', id);
 }
-
-const api = createApi(() => session.value, logout);
 
 function handleResultsUpdate(data) {
   if (route.name === 'detail' && Number(route.params.id) === Number(data.electionId)) {
@@ -102,15 +124,7 @@ watch(() => route.fullPath, () => {
       <component
         :is="Component"
         :key="pageKey"
-        :api="api"
-        :view="view"
-        :session="session"
-        :go="go"
-        :toast="toast"
-        :join-room="joinRoom"
-        :live-results="liveResults"
-        :refresh-key="refreshKey"
-        :set-session="setSession"
+        v-bind="pageProps"
       />
     </RouterView>
   </MainLayout>

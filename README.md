@@ -34,6 +34,8 @@
 
 La raíz administra el proyecto como un monorepo npm: contiene los comandos comunes y coordina los workspaces `backend/` y `frontend/`. El **backend** contiene la API, la lógica del servidor y las migraciones de PostgreSQL. El **frontend** está construido con Vue 3 y Vite; el backend sirve los archivos compilados desde `frontend/dist`.
 
+El panel administrador permite programar fechas de inicio y cierre; el backend cambia el estado automáticamente y también verifica el horario al recibir cada voto. La participación se calcula sobre las cuentas con rol de votante registradas, sin exponer quién participó. Desde el panel se pueden filtrar elecciones y exportar resultados como CSV o imprimirlos/guardarlos como PDF desde el navegador.
+
 ## Ejecutar localmente
 
 1. Instala Node.js y PostgreSQL.

@@ -10,9 +10,10 @@ defineProps({
 </script>
 
 <template>
+  <a class="skip-link" href="#main-content">Saltar al contenido</a>
   <AppNavigation :session="session" :go="go" :logout="logout" />
-  <main>
+  <main id="main-content">
     <slot />
   </main>
-  <div id="toast" :class="{ show: toastMessage }">{{ toastMessage }}</div>
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true" :class="{ show: toastMessage }">{{ toastMessage }}</div>
 </template>
