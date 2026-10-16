@@ -58,12 +58,12 @@ La aplicación estará disponible en http://localhost:3000. Consulta las [instru
 
 ## Publicar para acceder desde Internet
 
-El archivo [`render.yaml`](./render.yaml) configura el despliegue del frontend, el backend y una base de datos PostgreSQL en Render.
+El archivo [`render.yaml`](./render.yaml) configura el frontend y el backend en una instancia gratuita de Render. Para mantener PostgreSQL en el plan gratuito, la base se aloja por separado en Neon. El Blueprint no crea bases de datos de pago.
 
-1. Sube este repositorio a GitHub y crea una cuenta en [Render](https://render.com/).
-2. En Render, crea un **Blueprint** y conecta el repositorio.
-3. Cuando Render lo solicite, define `ADMIN_PASSWORD` con una contraseña segura para la cuenta administradora.
-4. Confirma la creación de los recursos. La base de datos definida usa el plan `basic-256mb`, que es de pago.
-5. Al terminar el despliegue, abre la URL pública del servicio. Esa misma dirección funciona desde celulares y computadoras con acceso a Internet.
+1. Crea un proyecto gratuito en [Neon](https://neon.tech/) y copia su cadena de conexión PostgreSQL desde **Connect**. Neon requiere SSL; la aplicación lo valida automáticamente al usar `DATABASE_URL`.
+2. Crea una cuenta en [Render](https://render.com/) y conecta este repositorio de GitHub con **New → Blueprint**.
+3. Al aplicar el Blueprint, introduce la cadena de conexión de Neon como `DATABASE_URL` y define un `ADMIN_PASSWORD` seguro. No compartas ni subas esas credenciales al repositorio.
+4. Confirma que el servicio web esté en el plan **Free** antes de desplegar. El Blueprint no aprovisiona PostgreSQL en Render.
+5. Cuando termine el despliegue, abre la URL pública de Render. Podrás visitar esa dirección desde teléfonos y computadores con acceso a Internet.
 
-Render configura el puerto, las credenciales de PostgreSQL y el secreto de sesión automáticamente. No publiques el archivo `backend/.env` ni compartas las credenciales de administrador. Para conservar los votos, mantén activa la base de datos de pago; no la elimines desde Render.
+En el plan gratuito de Render, el servidor se suspende tras un periodo sin actividad y puede tardar alrededor de un minuto en despertar. Neon Free también tiene límites de uso y suspende la base cuando está inactiva. Estos planes son adecuados para pruebas y proyectos pequeños, no para aplicaciones de producción con requisitos de disponibilidad. No publiques `backend/.env`, la URL de Neon ni la contraseña de administrador.
