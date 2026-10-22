@@ -16,9 +16,11 @@ const view = computed(() => ({
   name: route.name,
   id: route.params.id,
   register: route.name === 'register',
+  recovery: route.name === 'forgot-password',
+  resetToken: route.query.token,
   hash: route.query.hash,
 }));
-const pageKey = computed(() => `${route.name}:${route.params.id ?? ''}:${route.query.hash ?? ''}`);
+const pageKey = computed(() => `${route.name}:${route.params.id ?? ''}:${route.query.token ?? ''}:${route.query.hash ?? ''}`);
 let toastTimer;
 let currentRoom = null;
 const socket = io();
@@ -30,6 +32,8 @@ function go(name, extra = {}) {
     router.push({ name: extra.register ? 'register' : 'login' });
   } else if (name === 'verify') {
     router.push({ name, query: extra.hash ? { hash: extra.hash } : {} });
+  } else if (name === 'reset-password') {
+    router.push({ name, query: { token: extra.token } });
   } else {
     router.push({ name });
   }

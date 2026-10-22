@@ -10,6 +10,8 @@ const routes = [
   { path: '/elections/:id', name: 'detail', component: DetailView },
   { path: '/login', name: 'login', component: LoginView },
   { path: '/register', name: 'register', component: LoginView },
+  { path: '/forgot-password', name: 'forgot-password', component: LoginView },
+  { path: '/reset-password', name: 'reset-password', component: LoginView },
   { path: '/verify', name: 'verify', component: VerifyView },
   { path: '/admin', name: 'admin', component: AdminView },
   { path: '/:pathMatch(.*)*', redirect: { name: 'elections' } },

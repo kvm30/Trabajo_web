@@ -1,6 +1,9 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const UserModel = require('../models/user.model');
+const PasswordResetModel = require('../models/passwordReset.model');
 const { sign } = require('../middleware/auth');
+const { sendPasswordResetEmail } = require('../utils/email');
 
 const AuthController = {
   async register(req, res) {
@@ -30,6 +33,63 @@ const AuthController = {
       res.json({ success: true, data: { user: safe, token: sign(user) } });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
+    }
+  },
+
+  async forgotPassword(req, res) {
+    try {
+      const { email } = req.body;
+      if (typeof email !== 'string' || !email.trim()) {
+        return res.status(400).json({ success: false, message: 'El email es requerido' });
+      }
+
+      const user = await UserModel.findByEmail(email.trim());
+      if (user) {
+        const token = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+        await PasswordResetModel.save(user.id, tokenHash, expiresAt);
+
+        const appUrl = (process.env.APP_URL || 'http://localhost:5173').replace(/\/+$/, '');
+        await sendPasswordResetEmail(
+          user.email,
+          `${appUrl}/reset-password?token=${encodeURIComponent(token)}`
+        );
+      }
+
+      res.json({
+        success: true,
+        data: { message: 'Si existe una cuenta con ese correo, recibirás un enlace para cambiar tu contraseña.' },
+      });
+    } catch (err) {
+      console.error('Error al solicitar recuperación de contraseña:', err.message);
+      res.status(500).json({
+        success: false,
+        message: 'No fue posible enviar el correo de recuperación. Inténtalo más tarde.',
+      });
+    }
+  },
+
+  async resetPassword(req, res) {
+    try {
+      const { token, password } = req.body;
+      if (typeof token !== 'string' || !token || typeof password !== 'string' || !password) {
+        return res.status(400).json({ success: false, message: 'El token y la contraseña son requeridos' });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 8 caracteres' });
+      }
+
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const updated = await PasswordResetModel.updatePassword(tokenHash, password);
+      if (!updated) {
+        return res.status(400).json({ success: false, message: 'El enlace es inválido o venció. Solicita uno nuevo.' });
+      }
+
+      res.json({ success: true, data: { message: 'Contraseña actualizada' } });
+    } catch (err) {
+      console.error('Error al cambiar contraseña:', err.message);
+      res.status(500).json({ success: false, message: 'No fue posible cambiar la contraseña' });
     }
   },
 };
