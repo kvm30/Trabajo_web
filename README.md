@@ -62,6 +62,12 @@ La aplicación estará disponible en http://localhost:3000. Consulta las [instru
 
 Las personas con sesión iniciada pueden consultar los comprobantes guardados en **Mi historial**. Por privacidad, los comprobantes se conservan en el almacenamiento local del navegador y no se relacionan con la cuenta en el servidor; por eso el historial solo está disponible en el navegador donde se emitió el voto y se pierde al borrar sus datos.
 
+## Participación anónima y notificaciones
+
+Las cuentas votantes pueden abrir **Participación** para ver totales agregados por elección y el porcentaje general. El panel no lista personas ni relaciona cuentas con candidatos; no está disponible para visitantes sin sesión ni para administradores.
+
+Si configuras SMTP, el sistema envía un aviso de apertura a quienes aún no han votado en esa elección, un recordatorio una hora antes del cierre a quienes ya participaron y los resultados al cerrar la elección a esas mismas personas. Los destinatarios se ponen en copia oculta. Los avisos pendientes se reintentan si falla el correo. Configura `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` y `APP_URL`; sin SMTP, el resto del sitio funciona, pero no se envían avisos.
+
 ## Publicar para acceder desde Internet
 
 El archivo [`render.yaml`](./render.yaml) configura el servicio web gratuito en Render. Para evitar el costo y la expiración de una base de datos gratuita de Render, la aplicación puede conectarse a PostgreSQL en el plan gratuito de Neon.

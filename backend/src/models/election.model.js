@@ -42,6 +42,34 @@ const ElectionModel = {
     }));
   },
 
+  async participationSummary() {
+    const { rows } = await pool.query(`
+      SELECT e.id, e.title, e.status, e.starts_at, e.ends_at,
+             (SELECT COUNT(*)::int FROM votes v WHERE v.election_id = e.id) AS total_votes,
+             (SELECT COUNT(*)::int FROM voter_participation vp WHERE vp.election_id = e.id) AS participation_count,
+             (SELECT COUNT(*)::int FROM users u WHERE u.role = 'voter') AS eligible_voters
+      FROM elections e
+      ORDER BY e.id DESC`);
+    const elections = rows.map((row) => ({
+      ...row,
+      participation_rate: row.eligible_voters
+        ? Math.round((row.participation_count / row.eligible_voters) * 10000) / 100
+        : 0,
+    }));
+    const participationCount = elections.reduce((total, election) => total + election.participation_count, 0);
+    const eligibleVotes = elections.reduce((total, election) => total + election.eligible_voters, 0);
+    return {
+      election_count: elections.length,
+      total_votes: elections.reduce((total, election) => total + election.total_votes, 0),
+      participation_count: participationCount,
+      eligible_votes: eligibleVotes,
+      participation_rate: eligibleVotes
+        ? Math.round((participationCount / eligibleVotes) * 10000) / 100
+        : 0,
+      elections,
+    };
+  },
+
   async findById(id) {
     const { rows } = await pool.query(
       `SELECT e.id, e.title, e.description,

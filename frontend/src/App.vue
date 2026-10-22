@@ -46,6 +46,9 @@ const pageProps = computed(() => {
   if (route.name === 'admin') {
     return { api, session: session.value, go, toast, refreshKey: refreshKey.value };
   }
+  if (route.name === 'participation') {
+    return { api, session: session.value, go, refreshKey: refreshKey.value };
+  }
   return { api, go, refreshKey: refreshKey.value };
 });
 
@@ -95,7 +98,7 @@ function handleResultsUpdate(data) {
 }
 
 function handleElectionsChanged() {
-  if (['elections', 'admin', 'detail'].includes(route.name)) refreshKey.value += 1;
+  if (['elections', 'admin', 'detail', 'participation'].includes(route.name)) refreshKey.value += 1;
 }
 
 function handleConnect() {

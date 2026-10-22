@@ -1,4 +1,5 @@
 const ElectionModel = require('../models/election.model');
+const NotificationModel = require('../models/notification.model');
 const VoteModel = require('../models/vote.model');
 const socket = require('../socket');
 
@@ -18,6 +19,14 @@ function validateSchedule(startsAt, endsAt) {
 }
 
 const ElectionController = {
+  async participationSummary(_req, res) {
+    try {
+      res.json({ success: true, data: await ElectionModel.participationSummary() });
+    } catch (err) {
+      fail(res, err);
+    }
+  },
+
   async getAll(req, res) {
     try { res.json({ success: true, data: await ElectionModel.findAll() }); }
     catch (err) { fail(res, err); }
@@ -99,6 +108,13 @@ const ElectionController = {
       }
       const e = await ElectionModel.setStatus(req.params.id, status);
       if (!e) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
+      if (status === 'open' || status === 'closed') {
+        try {
+          await NotificationModel.enqueue(req.params.id, status === 'open' ? 'opened' : 'results');
+        } catch (err) {
+          console.error(`No se pudo registrar la notificación para la elección ${req.params.id}:`, err.message);
+        }
+      }
       socket.emitElectionsChanged();
       res.json({ success: true, data: e });
     } catch (err) { fail(res, err); }

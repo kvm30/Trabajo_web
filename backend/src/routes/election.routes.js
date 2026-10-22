@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const C = require('../controllers/election.controller');
-const { auth, admin } = require('../middleware/auth');
+const { auth, admin, voter } = require('../middleware/auth');
 const router = Router();
 
 /**
@@ -32,6 +32,7 @@ const router = Router();
  */
 router.get('/', C.getAll);
 router.post('/', auth, admin, C.create);
+router.get('/participation', auth, voter, C.participationSummary);
 
 /**
  * @swagger

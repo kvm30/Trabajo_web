@@ -6,6 +6,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const runMigrations = require('./config/migrate');
 const ElectionModel = require('./models/election.model');
+const NotificationModel = require('./models/notification.model');
 const socket = require('./socket');
 
 const app = express();
@@ -43,14 +44,26 @@ socket.init(server);
 async function start() {
   try {
     await runMigrations();
-    const refreshScheduledElections = async () => {
+    const runScheduledTasks = async () => {
       const changedIds = await ElectionModel.refreshScheduledStatuses();
+      for (const electionId of changedIds) {
+        const election = await ElectionModel.findById(electionId);
+        if (!election) continue;
+        const eventType = election.status === 'open' ? 'opened' : 'results';
+        try {
+          await NotificationModel.enqueue(electionId, eventType);
+        } catch (err) {
+          console.error(`No se pudo registrar la notificación para la elección ${electionId}:`, err.message);
+        }
+      }
       if (changedIds.length) socket.emitElectionsChanged();
+      await NotificationModel.enqueueUpcomingClosures();
+      await NotificationModel.processPending();
     };
-    await refreshScheduledElections();
+    await runScheduledTasks();
     setInterval(() => {
-      refreshScheduledElections().catch((err) => {
-        console.error('Error al actualizar estados programados:', err.message);
+      runScheduledTasks().catch((err) => {
+        console.error('Error al procesar elecciones y notificaciones programadas:', err.message);
       });
     }, 30_000);
     server.listen(PORT, '0.0.0.0', () => {

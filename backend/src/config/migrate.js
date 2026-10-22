@@ -53,6 +53,27 @@ const schema = [
     ],
   },
   {
+    table: 'election_notification_outbox',
+    create: `
+      CREATE TABLE IF NOT EXISTS election_notification_outbox (
+        id SERIAL PRIMARY KEY,
+        election_id INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+        event_type VARCHAR(20) NOT NULL CHECK (event_type IN ('opened', 'closing_soon', 'results')),
+        status VARCHAR(12) NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending', 'processing', 'sent')),
+        recipients JSONB NOT NULL DEFAULT '[]'::jsonb,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        available_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        locked_at TIMESTAMPTZ,
+        sent_at TIMESTAMPTZ,
+        last_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (election_id, event_type)
+      )
+    `,
+    columns: [],
+  },
+  {
     table: 'candidates',
     create: `
       CREATE TABLE IF NOT EXISTS candidates (

@@ -1,19 +1,21 @@
-const nodemailer = require('nodemailer');
-
-async function sendPasswordResetEmail(email, resetUrl) {
+function createTransporter() {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM } = process.env;
   if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASSWORD || !SMTP_FROM) {
     throw new Error('Configura SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD y SMTP_FROM para enviar correos');
   }
 
-  const transporter = nodemailer.createTransport({
+  const nodemailer = require('nodemailer');
+  return nodemailer.createTransport({
     host: SMTP_HOST,
     port: Number(SMTP_PORT),
     secure: process.env.SMTP_SECURE === 'true',
     auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
   });
+}
 
-  await transporter.sendMail({
+async function sendPasswordResetEmail(email, resetUrl) {
+  const { SMTP_FROM } = process.env;
+  await createTransporter().sendMail({
     from: SMTP_FROM,
     to: email,
     subject: 'Recuperación de contraseña',
@@ -21,4 +23,16 @@ async function sendPasswordResetEmail(email, resetUrl) {
   });
 }
 
-module.exports = { sendPasswordResetEmail };
+async function sendElectionNotificationEmail(recipients, subject, text) {
+  if (!recipients.length) return;
+  const { SMTP_FROM } = process.env;
+  await createTransporter().sendMail({
+    from: SMTP_FROM,
+    to: SMTP_FROM,
+    bcc: recipients,
+    subject,
+    text,
+  });
+}
+
+module.exports = { sendPasswordResetEmail, sendElectionNotificationEmail };
