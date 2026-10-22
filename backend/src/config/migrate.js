@@ -25,6 +25,17 @@ const schema = [
     ],
   },
   {
+    table: 'password_reset_tokens',
+    create: `
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        token_hash CHAR(64) UNIQUE NOT NULL,
+        expires_at TIMESTAMP NOT NULL
+      )
+    `,
+    columns: [],
+  },
+  {
     table: 'elections',
     create: `
       CREATE TABLE IF NOT EXISTS elections (

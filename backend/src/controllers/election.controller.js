@@ -87,6 +87,16 @@ const ElectionController = {
       if (!['draft', 'open', 'closed'].includes(status)) {
         return res.status(400).json({ success: false, message: 'status debe ser draft, open o closed' });
       }
+      const currentElection = await ElectionModel.findById(req.params.id);
+      if (!currentElection) {
+        return res.status(404).json({ success: false, message: 'Elección no encontrada' });
+      }
+      if (status === 'open' && !(await ElectionModel.countCandidates(currentElection.id))) {
+        return res.status(400).json({
+          success: false,
+          message: 'Agrega al menos un candidato antes de abrir la elección',
+        });
+      }
       const e = await ElectionModel.setStatus(req.params.id, status);
       if (!e) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
       socket.emitElectionsChanged();

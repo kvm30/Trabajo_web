@@ -15,6 +15,7 @@ const ElectionModel = {
              END AS status,
              e.created_at, e.starts_at, e.ends_at,
              (SELECT COUNT(*)::int FROM votes v WHERE v.election_id = e.id) AS total_votes,
+             (SELECT COUNT(*)::int FROM candidates c WHERE c.election_id = e.id) AS total_candidates,
              (SELECT COUNT(*)::int FROM voter_participation vp WHERE vp.election_id = e.id) AS participation_count,
              (SELECT COUNT(*)::int FROM users u WHERE u.role = 'voter') AS eligible_voters,
              (SELECT COALESCE(
@@ -95,6 +96,14 @@ const ElectionModel = {
        WHERE status IN ('draft', 'open') AND ends_at IS NOT NULL AND ends_at <= NOW()
        RETURNING id`);
     return [...opened.rows, ...closed.rows].map((row) => row.id);
+  },
+
+  async countCandidates(electionId) {
+    const { rows } = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM candidates WHERE election_id = $1',
+      [electionId]
+    );
+    return rows[0].total;
   },
 
   async addCandidate(electionId, { name, description }) {

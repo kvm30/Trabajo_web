@@ -1,6 +1,6 @@
 const pool = require('../config/db');
-const HttpError = require('../utils/httpError');
-const { GENESIS, makeReceipt, chainHash } = require('../utils/crypto');
+const HttpError = require('./utils/httpError');
+const { GENESIS, makeReceipt, chainHash } = require('./utils/crypto');
 
 const VoteModel = {
   // Todo en UNA transacción: o se registra participación + voto + cadena, o nada.
