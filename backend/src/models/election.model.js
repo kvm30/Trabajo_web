@@ -4,7 +4,8 @@ const ElectionModel = {
   async findAll() {
     const { rows } = await pool.query(`
       SELECT e.id, e.title, e.description, e.status, e.created_at,
-             (SELECT COUNT(*)::int FROM votes v WHERE v.election_id = e.id) AS total_votes
+             (SELECT COUNT(*)::int FROM votes v WHERE v.election_id = e.id) AS total_votes,
+             (SELECT COUNT(*)::int FROM candidates c WHERE c.election_id = e.id) AS total_candidates
       FROM elections e ORDER BY e.id DESC`);
     return rows;
   },
@@ -26,6 +27,14 @@ const ElectionModel = {
     const { rows } = await pool.query(
       'UPDATE elections SET status = $1 WHERE id = $2 RETURNING *', [status, id]);
     return rows[0] || null;
+  },
+
+  async countCandidates(electionId) {
+    const { rows } = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM candidates WHERE election_id = $1',
+      [electionId]
+    );
+    return rows[0].total;
   },
 
   async addCandidate(electionId, { name, description }) {
