@@ -60,12 +60,12 @@ La aplicación estará disponible en http://localhost:3000. Consulta las [instru
 
 ## Publicar para acceder desde Internet
 
-El archivo [`render.yaml`](./render.yaml) configura el despliegue del frontend, el backend y una base de datos PostgreSQL en Render.
+El archivo [`render.yaml`](./render.yaml) configura el servicio web gratuito en Render. Para evitar el costo y la expiración de una base de datos gratuita de Render, la aplicación puede conectarse a PostgreSQL en el plan gratuito de Neon.
 
-1. Sube este repositorio a GitHub y crea una cuenta en [Render](https://render.com/).
-2. En Render, crea un **Blueprint** y conecta el repositorio.
-3. Cuando Render lo solicite, define `ADMIN_PASSWORD` con una contraseña segura para la cuenta administradora.
-4. Confirma la creación de los recursos. La base de datos definida usa el plan `basic-256mb`, que es de pago.
-5. Al terminar el despliegue, abre la URL pública del servicio. Esa misma dirección funciona desde celulares y computadoras con acceso a Internet.
+1. Sube los cambios de este repositorio a GitHub.
+2. Crea un proyecto gratuito en [Neon](https://neon.tech/) y copia su cadena de conexión PostgreSQL (`DATABASE_URL`).
+3. En [Render](https://render.com/), crea un **Blueprint** y conecta este repositorio.
+4. Cuando Render solicite las variables, pega la cadena de Neon en `DATABASE_URL` y define una contraseña segura y única en `ADMIN_PASSWORD`.
+5. Confirma el despliegue. Al terminar, Render mostrará la URL pública `https://...onrender.com`; compártela para que ingresen desde cualquier red o dispositivo.
 
-Render configura el puerto, las credenciales de PostgreSQL y el secreto de sesión automáticamente. No publiques el archivo `backend/.env` ni compartas las credenciales de administrador. Para conservar los votos, mantén activa la base de datos de pago; no la elimines desde Render.
+El servicio gratuito de Render puede suspenderse tras un periodo sin visitas; el primer acceso después de la suspensión puede tardar alrededor de un minuto. Neon también aplica límites a su plan gratuito. Estos planes sirven para demostraciones y pruebas, pero no se recomiendan para elecciones reales o información que requiera disponibilidad y conservación garantizadas. No publiques `backend/.env` ni compartas las credenciales de administrador.

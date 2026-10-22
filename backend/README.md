@@ -37,7 +37,7 @@ npm start
 
 ## Publicación en Internet
 
-La configuración de despliegue para Render está en [`../render.yaml`](../render.yaml). Sigue los pasos de publicación del [README principal](../README.md). Render proporciona el puerto y las variables de PostgreSQL; debes establecer `ADMIN_PASSWORD` al crear el Blueprint. La base de datos configurada es un recurso de pago para conservar los datos.
+La configuración del servicio web gratuito de Render está en [`../render.yaml`](../render.yaml). Sigue los pasos de publicación del [README principal](../README.md): crea una base PostgreSQL en Neon y configura `DATABASE_URL` y `ADMIN_PASSWORD` al crear el Blueprint. El pool admite `DATABASE_URL` con SSL verificado y conserva la configuración `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` para desarrollo local. Los planes gratuitos pueden suspender el servicio o tener límites; no se recomiendan para elecciones reales.
 
 ## Cómo funciona la auditoría
 - `voter_participation` guarda QUIÉN votó (evita doble voto) pero no por quién.
