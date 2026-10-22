@@ -24,4 +24,11 @@ function admin(req, res, next) {
   next();
 }
 
-module.exports = { auth, admin, sign };
+function voter(req, res, next) {
+  if (req.user?.role !== 'voter') {
+    return res.status(403).json({ success: false, message: 'Solo cuentas votantes' });
+  }
+  next();
+}
+
+module.exports = { auth, admin, voter, sign };

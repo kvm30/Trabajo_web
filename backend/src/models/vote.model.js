@@ -11,9 +11,22 @@ const VoteModel = {
       // Serializa los votos de una misma elección para que la cadena de hashes no se bifurque.
       await client.query('SELECT pg_advisory_xact_lock($1)', [electionId]);
 
-      const el = (await client.query('SELECT status FROM elections WHERE id = $1', [electionId])).rows[0];
+      const el = (await client.query(
+        `SELECT status, starts_at, ends_at,
+                CASE
+                  WHEN status = 'closed' OR ends_at <= NOW() THEN 'closed'
+                  WHEN starts_at > NOW() THEN 'draft'
+                  WHEN starts_at IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM candidates c WHERE c.election_id = elections.id
+                  ) THEN 'open'
+                  WHEN starts_at IS NOT NULL THEN 'draft'
+                  ELSE status
+                END AS effective_status
+         FROM elections WHERE id = $1`,
+        [electionId]
+      )).rows[0];
       if (!el) throw new HttpError(404, 'Elección no encontrada');
-      if (el.status !== 'open') throw new HttpError(400, 'La elección no está abierta');
+      if (el.effective_status !== 'open') throw new HttpError(400, 'La elección no está abierta');
 
       const cand = await client.query(
         'SELECT 1 FROM candidates WHERE id = $1 AND election_id = $2', [candidateId, electionId]);

@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const C = require('../controllers/election.controller');
-const { auth, admin } = require('../middleware/auth');
+const { auth, admin, voter } = require('../middleware/auth');
 const router = Router();
 
 /**
@@ -25,11 +25,39 @@ const router = Router();
  *             properties:
  *               title: { type: string, example: Elección de representante 2026 }
  *               description: { type: string }
+ *               starts_at: { type: string, format: date-time }
+ *               ends_at: { type: string, format: date-time }
  *     responses:
  *       201: { description: Creada }
  */
 router.get('/', C.getAll);
 router.post('/', auth, admin, C.create);
+router.get('/participation', auth, voter, C.participationSummary);
+
+/**
+ * @swagger
+ * /api/elections/{id}/schedule:
+ *   patch:
+ *     summary: Programar inicio y cierre automáticos (admin, solo en borrador)
+ *     tags: [Elections]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [starts_at, ends_at]
+ *             properties:
+ *               starts_at: { type: string, format: date-time }
+ *               ends_at: { type: string, format: date-time }
+ *     responses:
+ *       200: { description: Calendario actualizado }
+ *       400: { description: Fechas no válidas o elección no editable }
+ */
+router.patch('/:id/schedule', auth, admin, C.setSchedule);
 
 /**
  * @swagger
