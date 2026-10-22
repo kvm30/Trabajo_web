@@ -56,6 +56,10 @@ npm start
 
 La aplicación estará disponible en http://localhost:3000. Consulta las [instrucciones del backend](./backend/README.md) para detalles de configuración.
 
+## Historial de votos
+
+Las personas con sesión iniciada pueden consultar los comprobantes guardados en **Mi historial**. Por privacidad, los comprobantes se conservan en el almacenamiento local del navegador y no se relacionan con la cuenta en el servidor; por eso el historial solo está disponible en el navegador donde se emitió el voto y se pierde al borrar sus datos.
+
 ## Publicar para acceder desde Internet
 
 El archivo [`render.yaml`](./render.yaml) configura el despliegue del frontend, el backend y una base de datos PostgreSQL en Render.
