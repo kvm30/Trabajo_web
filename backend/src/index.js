@@ -39,9 +39,22 @@ app.get('*', (req, res, next) => {
 
 socket.init(server);
 
+const ElectionModel = require('./models/election.model');
+
+async function reconcileElectionSchedule() {
+  try {
+    const changed = await ElectionModel.reconcileSchedule();
+    if (changed.length) socket.emitElectionsChanged();
+  } catch (err) {
+    console.error('Error al sincronizar calendarios de votación:', err.message);
+  }
+}
+
 async function start() {
   try {
     await runMigrations();
+    await reconcileElectionSchedule();
+    setInterval(reconcileElectionSchedule, 30_000).unref();
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`App + API escuchando en el puerto ${PORT}`);
       console.log(`Swagger disponible en /api-docs`);

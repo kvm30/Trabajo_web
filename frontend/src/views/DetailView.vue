@@ -23,6 +23,9 @@ const chainVisible = ref(false);
 const error = ref('');
 const busy = ref(false);
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
+function formatSchedule(value) {
+  return value ? new Date(value).toLocaleString() : 'No definida';
+}
 const savedReceiptKey = computed(() => props.session
   ? `receipt:${props.session.user.id}:${props.view.id}`
   : null);
@@ -123,6 +126,7 @@ watch(() => props.liveResults, (data) => {
         <span class="badge" :class="election.status">{{ statusLabels[election.status] }}</span>
       </div>
       <p class="muted">{{ election.description }}</p>
+      <p class="muted schedule-label"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }}<br><b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
     </div>
 
     <div class="card">

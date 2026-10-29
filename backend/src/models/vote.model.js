@@ -11,8 +11,19 @@ const VoteModel = {
       // Serializa los votos de una misma elección para que la cadena de hashes no se bifurque.
       await client.query('SELECT pg_advisory_xact_lock($1)', [electionId]);
 
-      const el = (await client.query('SELECT status FROM elections WHERE id = $1', [electionId])).rows[0];
+      const el = (await client.query(
+        'SELECT status, starts_at, ends_at FROM elections WHERE id = $1 FOR UPDATE',
+        [electionId]
+      )).rows[0];
       if (!el) throw new HttpError(404, 'Elección no encontrada');
+      if (!el.starts_at || !el.ends_at) {
+        throw new HttpError(400, 'La elección no tiene configuradas sus fechas de votación');
+      }
+      const now = new Date();
+      if (now < new Date(el.starts_at) || now >= new Date(el.ends_at)) {
+        await client.query("UPDATE elections SET status = 'closed' WHERE id = $1", [electionId]);
+        throw new HttpError(400, 'La votación está fuera de su horario permitido');
+      }
       if (el.status !== 'open') throw new HttpError(400, 'La elección no está abierta');
 
       const cand = await client.query(

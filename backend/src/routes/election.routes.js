@@ -21,10 +21,12 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [title]
+ *             required: [title, starts_at, ends_at]
  *             properties:
  *               title: { type: string, example: Elección de representante 2026 }
  *               description: { type: string }
+ *               starts_at: { type: string, format: date-time, description: Apertura automática }
+ *               ends_at: { type: string, format: date-time, description: Cierre automático }
  *     responses:
  *       201: { description: Creada }
  */

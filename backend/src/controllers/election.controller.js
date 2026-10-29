@@ -5,14 +5,30 @@ const socket = require('../socket');
 const fail = (res, err) =>
   res.status(err.status || 500).json({ success: false, message: err.message });
 
+function parseSchedule(startsAt, endsAt) {
+  const starts = startsAt ? new Date(startsAt) : null;
+  const ends = endsAt ? new Date(endsAt) : null;
+  if (!starts || !ends || Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) {
+    throw Object.assign(new Error('La fecha de inicio y cierre son requeridas y deben ser válidas'), { status: 400 });
+  }
+  if (starts >= ends) {
+    throw Object.assign(new Error('La fecha de cierre debe ser posterior a la fecha de inicio'), { status: 400 });
+  }
+  return { starts, ends };
+}
+
 const ElectionController = {
   async getAll(req, res) {
-    try { res.json({ success: true, data: await ElectionModel.findAll() }); }
+    try {
+      await ElectionModel.reconcileSchedule();
+      res.json({ success: true, data: await ElectionModel.findAll() });
+    }
     catch (err) { fail(res, err); }
   },
 
   async getById(req, res) {
     try {
+      await ElectionModel.reconcileSchedule();
       const election = await ElectionModel.findById(req.params.id);
       if (!election) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
       const results = await ElectionModel.results(election.id);
@@ -22,8 +38,17 @@ const ElectionController = {
 
   async create(req, res) {
     try {
-      if (!req.body.title) return res.status(400).json({ success: false, message: 'title es requerido' });
-      const e = await ElectionModel.create(req.body, req.user.id);
+      if (!req.body.title?.trim()) return res.status(400).json({ success: false, message: 'title es requerido' });
+      const { starts, ends } = parseSchedule(req.body.starts_at, req.body.ends_at);
+      if (starts <= new Date()) {
+        return res.status(400).json({ success: false, message: 'La fecha de inicio debe ser futura' });
+      }
+      const e = await ElectionModel.create({
+        ...req.body,
+        title: req.body.title.trim(),
+        starts_at: starts.toISOString(),
+        ends_at: ends.toISOString(),
+      }, req.user.id);
       socket.emitElectionsChanged();
       res.status(201).json({ success: true, data: e });
     } catch (err) { fail(res, err); }
@@ -53,11 +78,28 @@ const ElectionController = {
       if (!currentElection) {
         return res.status(404).json({ success: false, message: 'Elección no encontrada' });
       }
-      if (status === 'open' && !(await ElectionModel.countCandidates(currentElection.id))) {
-        return res.status(400).json({
-          success: false,
-          message: 'Agrega al menos un candidato antes de abrir la elección',
-        });
+      if (status === 'open') {
+        if (!(await ElectionModel.countCandidates(currentElection.id))) {
+          return res.status(400).json({
+            success: false,
+            message: 'Agrega al menos un candidato antes de abrir la elección',
+          });
+        }
+        if (!currentElection.starts_at || !currentElection.ends_at) {
+          return res.status(400).json({ success: false, message: 'La elección debe tener fechas de inicio y cierre' });
+        }
+        const starts = new Date(currentElection.starts_at);
+        const ends = new Date(currentElection.ends_at);
+        const now = new Date();
+        if (now < starts) {
+          return res.status(400).json({ success: false, message: 'La elección aún no puede abrirse porque la fecha de inicio no ha llegado' });
+        }
+        if (now >= ends) {
+          return res.status(400).json({ success: false, message: 'La elección no puede abrirse porque su fecha de cierre ya pasó' });
+        }
+      }
+      if (status === 'draft' && currentElection.status === 'closed') {
+        return res.status(400).json({ success: false, message: 'Una elección cerrada no puede volver a borrador' });
       }
       const e = await ElectionModel.setStatus(req.params.id, status);
       if (!e) return res.status(404).json({ success: false, message: 'Elección no encontrada' });

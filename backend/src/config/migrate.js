@@ -47,7 +47,10 @@ const schema = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `,
-    columns: [],
+    columns: [
+      { name: 'starts_at', def: 'TIMESTAMPTZ' },
+      { name: 'ends_at', def: 'TIMESTAMPTZ' },
+    ],
   },
   {
     table: 'candidates',

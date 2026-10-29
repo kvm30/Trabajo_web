@@ -12,6 +12,8 @@ const props = defineProps({
 const elections = ref([]);
 const title = ref('');
 const description = ref('');
+const startsAt = ref('');
+const endsAt = ref('');
 const candidateNames = ref({});
 const error = ref('');
 const loading = ref(false);
@@ -19,6 +21,10 @@ const creating = ref(false);
 const addingCandidateId = ref(null);
 const changingElectionId = ref(null);
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
+function formatSchedule(value) {
+  if (!value) return 'No definida';
+  return new Date(value).toLocaleString();
+}
 const summary = computed(() => ({
   total: elections.value.length,
   open: elections.value.filter((election) => election.status === 'open').length,
@@ -41,10 +47,17 @@ async function load() {
 async function createElection() {
   creating.value = true;
   try {
-    await props.api('/elections', 'POST', { title: title.value, description: description.value });
+    await props.api('/elections', 'POST', {
+      title: title.value,
+      description: description.value,
+      starts_at: startsAt.value ? new Date(startsAt.value).toISOString() : null,
+      ends_at: endsAt.value ? new Date(endsAt.value).toISOString() : null,
+    });
     props.toast('Elección creada');
     title.value = '';
     description.value = '';
+    startsAt.value = '';
+    endsAt.value = '';
     await load();
   } catch (err) {
     props.toast(err.message);
@@ -138,6 +151,16 @@ watch(() => props.refreshKey, load);
       <input id="title" v-model="title" required>
       <label for="description">Descripción</label>
       <textarea id="description" v-model="description" rows="2"></textarea>
+      <div class="row schedule-fields">
+        <div>
+          <label for="starts-at">Inicio</label>
+          <input id="starts-at" v-model="startsAt" type="datetime-local" required>
+        </div>
+        <div>
+          <label for="ends-at">Cierre</label>
+          <input id="ends-at" v-model="endsAt" type="datetime-local" required>
+        </div>
+      </div>
       <button type="submit" :disabled="creating">{{ creating ? 'Creando…' : 'Crear elección' }}</button>
     </form>
 
@@ -150,6 +173,7 @@ watch(() => props.refreshKey, load);
         <span class="badge" :class="election.status">{{ statusLabels[election.status] }}</span>
       </div>
       <p v-if="election.description" class="muted">{{ election.description }}</p>
+      <p class="muted schedule-label"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }}<br><b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
       <div class="election-metrics muted">
         <span>{{ election.total_candidates }} {{ election.total_candidates === 1 ? 'candidato' : 'candidatos' }}</span>
         <span>{{ election.total_votes }} {{ election.total_votes === 1 ? 'voto emitido' : 'votos emitidos' }}</span>
@@ -241,6 +265,15 @@ watch(() => props.refreshKey, load);
 
 .status-actions {
   margin-top: 10px;
+}
+
+.schedule-fields {
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.schedule-fields > div {
+  flex: 1;
 }
 
 @media (max-width: 640px) {
