@@ -10,6 +10,11 @@ const props = defineProps({
 });
 
 const elections = ref([]);
+const users = ref([]);
+const userSearch = ref('');
+const userRoleFilter = ref('all');
+const userStatusFilter = ref('all');
+const managingUserId = ref(null);
 const title = ref('');
 const description = ref('');
 const startsAt = ref('');
@@ -31,12 +36,29 @@ const summary = computed(() => ({
   closed: elections.value.filter((election) => election.status === 'closed').length,
   votes: elections.value.reduce((total, election) => total + election.total_votes, 0),
 }));
+const filteredUsers = computed(() => {
+  const search = userSearch.value.trim().toLowerCase();
+  return users.value.filter((user) => {
+    const matchesSearch = !search
+      || user.name?.toLowerCase().includes(search)
+      || user.email?.toLowerCase().includes(search);
+    const matchesRole = userRoleFilter.value === 'all' || user.role === userRoleFilter.value;
+    const matchesStatus = userStatusFilter.value === 'all'
+      || (userStatusFilter.value === 'active' ? user.active !== false : user.active === false);
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+});
 
 async function load() {
   error.value = '';
   loading.value = true;
   try {
-    elections.value = await props.api('/elections');
+    const [electionData, userData] = await Promise.all([
+      props.api('/elections'),
+      props.api('/users'),
+    ]);
+    elections.value = electionData;
+    users.value = userData;
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -109,6 +131,49 @@ async function changeStatus(electionId, status) {
     props.toast(err.message);
   } finally {
     changingElectionId.value = null;
+  }
+}
+
+async function changeUserRole(user, role) {
+  if (!window.confirm(`¿Cambiar el rol de "${user.name}" a ${role === 'admin' ? 'administrador' : 'votante'}?`)) return;
+  managingUserId.value = user.id;
+  try {
+    await props.api(`/users/${user.id}/role`, 'PATCH', { role });
+    props.toast('Rol actualizado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  } finally {
+    managingUserId.value = null;
+  }
+}
+
+async function toggleUserActive(user) {
+  const active = user.active === false;
+  if (!window.confirm(active ? `¿Activar la cuenta de "${user.name}"?` : `¿Desactivar la cuenta de "${user.name}"?`)) return;
+  managingUserId.value = user.id;
+  try {
+    await props.api(`/users/${user.id}/active`, 'PATCH', { active });
+    props.toast(active ? 'Cuenta activada' : 'Cuenta desactivada');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  } finally {
+    managingUserId.value = null;
+  }
+}
+
+async function deleteUser(user) {
+  if (!window.confirm(`¿Eliminar permanentemente la cuenta de "${user.name}"? Esta acción no se puede deshacer.`)) return;
+  managingUserId.value = user.id;
+  try {
+    await props.api(`/users/${user.id}`, 'DELETE');
+    props.toast('Usuario eliminado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  } finally {
+    managingUserId.value = null;
   }
 }
 
@@ -200,6 +265,51 @@ watch(() => props.refreshKey, load);
         >{{ status === 'open' ? 'Abrir elección' : status === 'closed' ? 'Cerrar elección' : 'Volver a borrador' }}</button>
       </div>
     </article>
+
+    <section class="card user-management">
+      <h2>Administración de usuarios</h2>
+      <div class="row user-filters">
+        <input v-model="userSearch" type="search" placeholder="Buscar por nombre o correo" aria-label="Buscar usuarios">
+        <select v-model="userRoleFilter" aria-label="Filtrar por rol">
+          <option value="all">Todos los roles</option>
+          <option value="voter">Votantes</option>
+          <option value="admin">Administradores</option>
+        </select>
+        <select v-model="userStatusFilter" aria-label="Filtrar por estado">
+          <option value="all">Todos los estados</option>
+          <option value="active">Activas</option>
+          <option value="inactive">Desactivadas</option>
+        </select>
+      </div>
+      <p v-if="!loading && filteredUsers.length === 0" class="muted">No hay usuarios que coincidan con los filtros.</p>
+      <div v-for="user in filteredUsers" :key="user.id" class="user-row">
+        <div class="user-info">
+          <b>{{ user.name }}</b>
+          <span class="muted">{{ user.email }}</span>
+        </div>
+        <div class="row user-actions">
+          <select
+            :value="user.role"
+            :disabled="managingUserId === user.id || user.id === session.user.id"
+            :aria-label="`Rol de ${user.name}`"
+            @change="changeUserRole(user, $event.target.value)"
+          >
+            <option value="voter">Votante</option>
+            <option value="admin">Administrador</option>
+          </select>
+          <button
+            class="ghost"
+            :disabled="managingUserId === user.id || user.id === session.user.id"
+            @click="toggleUserActive(user)"
+          >{{ user.active === false ? 'Activar' : 'Desactivar' }}</button>
+          <button
+            class="danger"
+            :disabled="managingUserId === user.id || user.id === session.user.id"
+            @click="deleteUser(user)"
+          >Eliminar</button>
+        </div>
+      </div>
+    </section>
   </template>
 </template>
 
@@ -267,6 +377,48 @@ watch(() => props.refreshKey, load);
   margin-top: 10px;
 }
 
+.user-management {
+  margin-top: 18px;
+}
+
+.user-filters {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.user-filters input {
+  flex: 1;
+}
+
+.user-filters select {
+  width: auto;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.user-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.user-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-actions {
+  flex-shrink: 0;
+  gap: 8px;
+}
+
 .schedule-fields {
   align-items: flex-end;
   gap: 12px;
@@ -279,6 +431,17 @@ watch(() => props.refreshKey, load);
 @media (max-width: 640px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-row,
+  .user-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .user-filters select,
+  .user-actions select {
+    width: 100%;
   }
 }
 </style>

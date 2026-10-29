@@ -127,8 +127,44 @@ const UserController = {
     }
   },
 
+  async setRole(req, res) {
+    try {
+      const { role } = req.body;
+      if (!['voter', 'admin'].includes(role)) {
+        return res.status(400).json({ success: false, message: 'El rol debe ser voter o admin' });
+      }
+      if (Number(req.params.id) === Number(req.user.id) && role !== 'admin') {
+        return res.status(400).json({ success: false, message: 'No puedes retirar tu propio rol de administrador' });
+      }
+      const user = await UserModel.setRole(req.params.id, role);
+      if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      res.json({ success: true, data: user });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
+
+  async setActive(req, res) {
+    try {
+      if (typeof req.body.active !== 'boolean') {
+        return res.status(400).json({ success: false, message: 'active debe ser true o false' });
+      }
+      if (Number(req.params.id) === Number(req.user.id) && req.body.active === false) {
+        return res.status(400).json({ success: false, message: 'No puedes desactivar tu propia cuenta' });
+      }
+      const user = await UserModel.setActive(req.params.id, req.body.active);
+      if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      res.json({ success: true, data: user });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
+
   async remove(req, res) {
     try {
+      if (Number(req.params.id) === Number(req.user.id)) {
+        return res.status(400).json({ success: false, message: 'No puedes eliminar tu propia cuenta' });
+      }
       const user = await UserModel.delete(req.params.id);
       if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
       res.json({ success: true, message: 'Usuario eliminado correctamente' });

@@ -82,6 +82,10 @@ router.get('/me', auth, UserController.getMe);
 router.put('/me', auth, UserController.updateMe);
 /** Cambiar contraseña autenticado */
 router.put('/me/password', auth, UserController.changePassword);
+/** Cambiar rol (solo admin) */
+router.patch('/:id/role', auth, admin, UserController.setRole);
+/** Activar o desactivar (solo admin) */
+router.patch('/:id/active', auth, admin, UserController.setActive);
 
 /**
  * @swagger

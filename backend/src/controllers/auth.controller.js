@@ -49,6 +49,9 @@ const AuthController = {
       if (!user || !(await bcrypt.compare(password || '', user.password))) {
         return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
       }
+      if (user.active === false) {
+        return res.status(403).json({ success: false, message: 'Esta cuenta está desactivada. Contacta al administrador.' });
+      }
       const { password: _omit, ...safe } = user;
       res.json({ success: true, data: { user: safe, token: sign(user) } });
     } catch (err) {
