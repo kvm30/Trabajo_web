@@ -10,6 +10,9 @@ const props = defineProps({
 const elections = ref([]);
 const error = ref('');
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
+function formatSchedule(value) {
+  return value ? new Date(value).toLocaleString() : 'No definida';
+}
 
 async function load() {
   error.value = '';
@@ -33,6 +36,7 @@ watch(() => props.refreshKey, load);
       <span class="badge" :class="election.status">{{ statusLabels[election.status] }}</span>
     </div>
     <p class="muted">{{ election.description }}</p>
+    <p class="muted"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }} · <b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
     <div class="row between">
       <span class="muted">{{ election.total_votes }} votos</span>
       <button @click="go('detail', { id: election.id })">
