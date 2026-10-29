@@ -5,17 +5,36 @@ const PasswordResetModel = require('../models/passwordReset.model');
 const { sign } = require('../middleware/auth');
 const { sendPasswordResetEmail } = require('../utils/email');
 
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function validPassword(value) {
+  return typeof value === 'string'
+    && value.length >= 8
+    && /[A-Za-z]/.test(value)
+    && /\d/.test(value);
+}
+
 const AuthController = {
   async register(req, res) {
     try {
       const { name, email, password } = req.body;
-      if (!name || !email || !password) {
+      const cleanName = typeof name === 'string' ? name.trim() : '';
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      if (!cleanName || !cleanEmail || !password) {
         return res.status(400).json({ success: false, message: 'name, email y password son requeridos' });
       }
-      if (await UserModel.findByEmail(email)) {
+      if (cleanName.length < 2 || cleanName.length > 100 || !validEmail(cleanEmail)) {
+        return res.status(400).json({ success: false, message: 'Nombre o email inválido' });
+      }
+      if (!validPassword(password)) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 8 caracteres, una letra y un número' });
+      }
+      if (await UserModel.findByEmail(cleanEmail)) {
         return res.status(409).json({ success: false, message: 'El email ya está registrado' });
       }
-      const user = await UserModel.create({ name, email, password });
+      const user = await UserModel.create({ name: cleanName, email: cleanEmail, password });
       res.status(201).json({ success: true, data: { user, token: sign(user) } });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -25,7 +44,8 @@ const AuthController = {
   async login(req, res) {
     try {
       const { email, password } = req.body;
-      const user = email && (await UserModel.findByEmail(email));
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      const user = cleanEmail && (await UserModel.findByEmail(cleanEmail));
       if (!user || !(await bcrypt.compare(password || '', user.password))) {
         return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
       }
@@ -76,8 +96,8 @@ const AuthController = {
       if (typeof token !== 'string' || !token || typeof password !== 'string' || !password) {
         return res.status(400).json({ success: false, message: 'El token y la contraseña son requeridos' });
       }
-      if (password.length < 8) {
-        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 8 caracteres' });
+      if (!validPassword(password)) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 8 caracteres, una letra y un número' });
       }
 
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');

@@ -14,6 +14,7 @@ defineProps({
       <button class="ghost" @click="go('verify')">Verificar comprobante</button>
       <button v-if="session" class="ghost" @click="go('history')">Mi historial</button>
       <button v-if="session?.user.role === 'admin'" class="ghost" @click="go('admin')">Admin</button>
+      <button v-if="session" class="ghost" @click="go('profile')">Perfil</button>
       <span v-if="session" class="user-chip">{{ session.user.name }}</span>
       <button v-if="session" class="ghost" @click="logout">Salir</button>
       <button v-else @click="go('login')">Ingresar</button>

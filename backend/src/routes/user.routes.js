@@ -76,6 +76,13 @@ const router = Router();
  */
 router.get('/', auth, admin, UserController.getAll);
 
+/** Obtener perfil autenticado */
+router.get('/me', auth, UserController.getMe);
+/** Actualizar datos personales */
+router.put('/me', auth, UserController.updateMe);
+/** Cambiar contraseña autenticado */
+router.put('/me/password', auth, UserController.changePassword);
+
 /**
  * @swagger
  * /api/users/{id}:
