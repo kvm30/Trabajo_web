@@ -9,30 +9,43 @@ const props = defineProps({
 
 const elections = ref([]);
 const error = ref('');
+const favoriteError = ref('');
+const favoriteIds = ref([]);
 const search = ref('');
 const statusFilter = ref('all');
 const sortOrder = ref('status');
+const favoritesKey = 'votacion:favorite-elections';
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
 const statusFilters = [
   { value: 'all', label: 'Todas' },
   { value: 'open', label: 'Abiertas' },
   { value: 'draft', label: 'Borradores' },
   { value: 'closed', label: 'Cerradas' },
+  { value: 'favorites', label: 'Mis favoritas' },
 ];
 const electionStats = computed(() => ({
   open: elections.value.filter((election) => election.status === 'open').length,
   draft: elections.value.filter((election) => election.status === 'draft').length,
   closed: elections.value.filter((election) => election.status === 'closed').length,
+  favorites: elections.value.filter((election) => favoriteIds.value.includes(String(election.id))).length,
 }));
 const filteredElections = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
   const filtered = elections.value.filter((election) => {
-    const matchesStatus = statusFilter.value === 'all' || election.status === statusFilter.value;
+    const matchesStatus = statusFilter.value === 'all'
+      || (statusFilter.value === 'favorites'
+        ? favoriteIds.value.includes(String(election.id))
+        : election.status === statusFilter.value);
     const searchableText = `${election.title ?? ''} ${election.description ?? ''}`.toLocaleLowerCase();
     return matchesStatus && searchableText.includes(query);
   });
 
   return filtered.sort((left, right) => {
+    if (sortOrder.value === 'favorites') {
+      return Number(favoriteIds.value.includes(String(right.id)))
+        - Number(favoriteIds.value.includes(String(left.id)))
+        || left.title.localeCompare(right.title);
+    }
     if (sortOrder.value === 'votes') {
       return (Number(right.total_votes) || 0) - (Number(left.total_votes) || 0)
         || left.title.localeCompare(right.title);
@@ -51,6 +64,35 @@ function formatSchedule(value) {
   return value ? new Date(value).toLocaleString() : 'No definida';
 }
 
+function loadFavorites() {
+  try {
+    const saved = localStorage.getItem(favoritesKey);
+    if (saved === null) return;
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed) || parsed.some((id) => !['string', 'number'].includes(typeof id))) {
+      throw new Error('El formato de tus elecciones favoritas no es válido.');
+    }
+    favoriteIds.value = parsed.map(String);
+  } catch (err) {
+    favoriteError.value = `No se pudieron cargar tus favoritas: ${err.message}`;
+  }
+}
+
+function toggleFavorite(electionId) {
+  const id = String(electionId);
+  const updated = favoriteIds.value.includes(id)
+    ? favoriteIds.value.filter((favoriteId) => favoriteId !== id)
+    : [...favoriteIds.value, id];
+
+  try {
+    localStorage.setItem(favoritesKey, JSON.stringify(updated));
+    favoriteIds.value = updated;
+    favoriteError.value = '';
+  } catch (err) {
+    favoriteError.value = `No se pudo guardar la elección favorita: ${err.message}`;
+  }
+}
+
 async function load() {
   error.value = '';
   try {
@@ -60,7 +102,10 @@ async function load() {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  loadFavorites();
+  load();
+});
 watch(() => props.refreshKey, load);
 </script>
 
@@ -84,9 +129,17 @@ watch(() => props.refreshKey, load);
       <strong>{{ electionStats.closed }}</strong>
       <span class="muted">Votación finalizada</span>
     </article>
+    <article class="card stat-card">
+      <span class="badge">Favoritas</span>
+      <strong>{{ electionStats.favorites }}</strong>
+      <span class="muted">Guardadas en este navegador</span>
+    </article>
   </section>
 
   <section v-if="elections.length" class="card election-filters" aria-label="Buscar y filtrar elecciones">
+    <p class="muted favorites-note">
+      Guarda elecciones para encontrarlas rápido. Tus favoritas solo se almacenan en este navegador.
+    </p>
     <label for="election-search">Buscar por nombre o descripción</label>
     <input
       id="election-search"
@@ -111,6 +164,7 @@ watch(() => props.refreshKey, load);
       <option value="status">Abiertas primero</option>
       <option value="votes">Más votos</option>
       <option value="name">Nombre (A-Z)</option>
+      <option value="favorites">Favoritas primero</option>
     </select>
     <p class="muted filter-count" aria-live="polite">
       {{ filteredElections.length }} de {{ elections.length }} elecciones
@@ -126,18 +180,34 @@ watch(() => props.refreshKey, load);
     <p class="muted"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }} · <b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
     <div class="row between">
       <span class="muted">{{ election.total_votes }} votos</span>
-      <button @click="go('detail', { id: election.id })">
-        {{ election.status === 'open' ? 'Votar / ver conteo' : 'Ver detalle' }}
-      </button>
+      <div class="row">
+        <button
+          type="button"
+          class="ghost favorite-button"
+          :aria-pressed="favoriteIds.includes(String(election.id))"
+          :aria-label="favoriteIds.includes(String(election.id))
+            ? `Quitar ${election.title} de favoritas`
+            : `Guardar ${election.title} en favoritas`"
+          @click="toggleFavorite(election.id)"
+        >{{ favoriteIds.includes(String(election.id)) ? '★ Favorita' : '☆ Guardar' }}</button>
+        <button @click="go('detail', { id: election.id })">
+          {{ election.status === 'open' ? 'Votar / ver conteo' : 'Ver detalle' }}
+        </button>
+      </div>
     </div>
   </div>
+  <div v-if="favoriteError" class="card msg bad" role="alert">{{ favoriteError }}</div>
   <div v-if="!error && elections.length === 0" class="card empty-elections">
     <h3>Aún no hay elecciones</h3>
     <p class="muted">Cuando se publiquen votaciones, aparecerán aquí.</p>
   </div>
   <div v-else-if="!error && filteredElections.length === 0" class="card empty-elections">
-    <h3>No encontramos elecciones</h3>
-    <p class="muted">Prueba con otro término o cambia el filtro de estado.</p>
+    <h3>{{ statusFilter === 'favorites' ? 'Aún no tienes elecciones favoritas' : 'No encontramos elecciones' }}</h3>
+    <p class="muted">
+      {{ statusFilter === 'favorites'
+        ? 'Pulsa «Guardar» en una elección para tenerla a mano.'
+        : 'Prueba con otro término o cambia el filtro de estado.' }}
+    </p>
     <button class="ghost" @click="search = ''; statusFilter = 'all'">Limpiar filtros</button>
   </div>
 </template>
@@ -145,7 +215,7 @@ watch(() => props.refreshKey, load);
 <style scoped>
 .election-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -168,6 +238,10 @@ watch(() => props.refreshKey, load);
 
 .election-filters label {
   display: block;
+}
+
+.favorites-note {
+  margin-bottom: 12px;
 }
 
 .election-filters input {
@@ -206,6 +280,11 @@ watch(() => props.refreshKey, load);
   color: var(--brand);
 }
 
+.favorite-button[aria-pressed="true"] {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
 .filter-count {
   margin: 12px 0 0;
 }
@@ -220,8 +299,7 @@ watch(() => props.refreshKey, load);
 
 @media (max-width: 520px) {
   .election-stats {
-    grid-template-columns: 1fr;
-    gap: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
