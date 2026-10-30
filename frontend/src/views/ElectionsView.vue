@@ -11,6 +11,7 @@ const elections = ref([]);
 const error = ref('');
 const search = ref('');
 const statusFilter = ref('all');
+const sortOrder = ref('status');
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
 const statusFilters = [
   { value: 'all', label: 'Todas' },
@@ -18,12 +19,31 @@ const statusFilters = [
   { value: 'draft', label: 'Borradores' },
   { value: 'closed', label: 'Cerradas' },
 ];
+const electionStats = computed(() => ({
+  open: elections.value.filter((election) => election.status === 'open').length,
+  draft: elections.value.filter((election) => election.status === 'draft').length,
+  closed: elections.value.filter((election) => election.status === 'closed').length,
+}));
 const filteredElections = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
-  return elections.value.filter((election) => {
+  const filtered = elections.value.filter((election) => {
     const matchesStatus = statusFilter.value === 'all' || election.status === statusFilter.value;
     const searchableText = `${election.title ?? ''} ${election.description ?? ''}`.toLocaleLowerCase();
     return matchesStatus && searchableText.includes(query);
+  });
+
+  return filtered.sort((left, right) => {
+    if (sortOrder.value === 'votes') {
+      return (Number(right.total_votes) || 0) - (Number(left.total_votes) || 0)
+        || left.title.localeCompare(right.title);
+    }
+    if (sortOrder.value === 'name') {
+      return left.title.localeCompare(right.title);
+    }
+
+    const statusPriority = { open: 0, draft: 1, closed: 2 };
+    return (statusPriority[left.status] ?? 3) - (statusPriority[right.status] ?? 3)
+      || left.title.localeCompare(right.title);
   });
 });
 
@@ -48,6 +68,24 @@ watch(() => props.refreshKey, load);
   <h2>Elecciones</h2>
   <div v-if="error" class="card msg bad">{{ error }}</div>
 
+  <section v-if="elections.length" class="election-stats" aria-label="Resumen de elecciones">
+    <article class="card stat-card">
+      <span class="badge open">Abiertas</span>
+      <strong>{{ electionStats.open }}</strong>
+      <span class="muted">Reciben votos</span>
+    </article>
+    <article class="card stat-card">
+      <span class="badge draft">Borradores</span>
+      <strong>{{ electionStats.draft }}</strong>
+      <span class="muted">En preparación</span>
+    </article>
+    <article class="card stat-card">
+      <span class="badge closed">Cerradas</span>
+      <strong>{{ electionStats.closed }}</strong>
+      <span class="muted">Votación finalizada</span>
+    </article>
+  </section>
+
   <section v-if="elections.length" class="card election-filters" aria-label="Buscar y filtrar elecciones">
     <label for="election-search">Buscar por nombre o descripción</label>
     <input
@@ -68,6 +106,12 @@ watch(() => props.refreshKey, load);
         @click="statusFilter = filter.value"
       >{{ filter.label }}</button>
     </div>
+    <label class="sort-label" for="election-sort">Ordenar resultados</label>
+    <select id="election-sort" v-model="sortOrder">
+      <option value="status">Abiertas primero</option>
+      <option value="votes">Más votos</option>
+      <option value="name">Nombre (A-Z)</option>
+    </select>
     <p class="muted filter-count" aria-live="polite">
       {{ filteredElections.length }} de {{ elections.length }} elecciones
     </p>
@@ -99,12 +143,55 @@ watch(() => props.refreshKey, load);
 </template>
 
 <style scoped>
+.election-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.stat-card strong {
+  font-size: 1.8rem;
+  line-height: 1.2;
+}
+
+.stat-card .muted {
+  margin: 0;
+}
+
 .election-filters label {
   display: block;
 }
 
 .election-filters input {
   margin-bottom: 12px;
+}
+
+.sort-label {
+  margin-top: 16px;
+}
+
+.election-filters select {
+  width: 100%;
+  margin-top: 5px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.election-filters select:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand) 42%, transparent);
+  outline-offset: 3px;
 }
 
 .status-filters {
@@ -129,5 +216,12 @@ watch(() => props.refreshKey, load);
 
 .empty-elections p {
   margin-bottom: 16px;
+}
+
+@media (max-width: 520px) {
+  .election-stats {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
 }
 </style>
