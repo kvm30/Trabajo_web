@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
   api: { type: Function, required: true },
@@ -9,7 +9,24 @@ const props = defineProps({
 
 const elections = ref([]);
 const error = ref('');
+const search = ref('');
+const statusFilter = ref('all');
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
+const statusFilters = [
+  { value: 'all', label: 'Todas' },
+  { value: 'open', label: 'Abiertas' },
+  { value: 'draft', label: 'Borradores' },
+  { value: 'closed', label: 'Cerradas' },
+];
+const filteredElections = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase();
+  return elections.value.filter((election) => {
+    const matchesStatus = statusFilter.value === 'all' || election.status === statusFilter.value;
+    const searchableText = `${election.title ?? ''} ${election.description ?? ''}`.toLocaleLowerCase();
+    return matchesStatus && searchableText.includes(query);
+  });
+});
+
 function formatSchedule(value) {
   return value ? new Date(value).toLocaleString() : 'No definida';
 }
@@ -30,7 +47,33 @@ watch(() => props.refreshKey, load);
 <template>
   <h2>Elecciones</h2>
   <div v-if="error" class="card msg bad">{{ error }}</div>
-  <div v-for="election in elections" :key="election.id" class="card">
+
+  <section v-if="elections.length" class="card election-filters" aria-label="Buscar y filtrar elecciones">
+    <label for="election-search">Buscar por nombre o descripción</label>
+    <input
+      id="election-search"
+      v-model="search"
+      type="search"
+      placeholder="Ej. elección de representantes"
+      autocomplete="off"
+    >
+    <div class="status-filters" role="group" aria-label="Filtrar por estado">
+      <button
+        v-for="filter in statusFilters"
+        :key="filter.value"
+        type="button"
+        class="ghost"
+        :aria-pressed="statusFilter === filter.value"
+        :class="{ selected: statusFilter === filter.value }"
+        @click="statusFilter = filter.value"
+      >{{ filter.label }}</button>
+    </div>
+    <p class="muted filter-count" aria-live="polite">
+      {{ filteredElections.length }} de {{ elections.length }} elecciones
+    </p>
+  </section>
+
+  <div v-for="election in filteredElections" :key="election.id" class="card">
     <div class="row between">
       <h3>{{ election.title }}</h3>
       <span class="badge" :class="election.status">{{ statusLabels[election.status] }}</span>
@@ -44,5 +87,47 @@ watch(() => props.refreshKey, load);
       </button>
     </div>
   </div>
-  <p v-if="!error && elections.length === 0" class="muted">Aún no hay elecciones.</p>
+  <div v-if="!error && elections.length === 0" class="card empty-elections">
+    <h3>Aún no hay elecciones</h3>
+    <p class="muted">Cuando se publiquen votaciones, aparecerán aquí.</p>
+  </div>
+  <div v-else-if="!error && filteredElections.length === 0" class="card empty-elections">
+    <h3>No encontramos elecciones</h3>
+    <p class="muted">Prueba con otro término o cambia el filtro de estado.</p>
+    <button class="ghost" @click="search = ''; statusFilter = 'all'">Limpiar filtros</button>
+  </div>
 </template>
+
+<style scoped>
+.election-filters label {
+  display: block;
+}
+
+.election-filters input {
+  margin-bottom: 12px;
+}
+
+.status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-filters button.selected {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.filter-count {
+  margin: 12px 0 0;
+}
+
+.empty-elections {
+  text-align: center;
+}
+
+.empty-elections p {
+  margin-bottom: 16px;
+}
+</style>
