@@ -162,6 +162,18 @@ watch(() => props.liveResults, (data) => {
       <p v-else-if="election.status === 'open'" class="countdown" role="status">{{ countdown(election.ends_at, 'Cierre') }}</p>
     </div>
 
+    <section v-if="election.rules || election.faq" class="card election-information" aria-label="Información de la elección">
+      <h3>Información para votar</h3>
+      <div v-if="election.rules">
+        <h4>Reglas e instrucciones</h4>
+        <p class="preserve-lines">{{ election.rules }}</p>
+      </div>
+      <div v-if="election.faq">
+        <h4>Preguntas frecuentes</h4>
+        <p class="preserve-lines">{{ election.faq }}</p>
+      </div>
+    </section>
+
     <div class="card">
       <div class="row between">
         <h3><span class="live"></span>Conteo en vivo</h3>
@@ -295,6 +307,14 @@ watch(() => props.liveResults, (data) => {
 
 .detail-heading {
   margin-top: 12px;
+}
+
+.preserve-lines {
+  white-space: pre-line;
+}
+
+.election-information h4 {
+  margin-bottom: 6px;
 }
 
 .result-row {

@@ -38,7 +38,8 @@ const filteredElections = computed(() => {
       || (statusFilter.value === 'favorites'
         ? favoriteIds.value.includes(String(election.id))
         : election.status === statusFilter.value);
-    const searchableText = `${election.title ?? ''} ${election.description ?? ''}`.toLocaleLowerCase();
+    const searchableText = `${election.title ?? ''} ${election.description ?? ''} ${election.rules ?? ''} ${election.faq ?? ''}`
+      .toLocaleLowerCase();
     return matchesStatus && searchableText.includes(query);
   });
 

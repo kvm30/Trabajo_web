@@ -28,6 +28,7 @@ function toggleNotifications() {
     <h1 class="site-brand">🗳️ Votación en Vivo</h1>
     <nav class="nav-actions" aria-label="Navegación principal">
       <button class="ghost" @click="go('elections')">Elecciones</button>
+      <button class="ghost" @click="go('calendar')">Calendario</button>
       <button class="ghost" @click="go('verify')">Verificar comprobante</button>
       <button v-if="session" class="ghost" @click="go('history')">Mi historial</button>
       <button v-if="session?.user.role === 'voter'" class="ghost" @click="go('participation')">Participación</button>

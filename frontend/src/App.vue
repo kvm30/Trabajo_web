@@ -127,7 +127,7 @@ function handleResultsUpdate(data) {
 }
 
 function handleElectionsChanged() {
-  if (['elections', 'admin', 'detail', 'participation'].includes(route.name)) refreshKey.value += 1;
+  if (['elections', 'calendar', 'admin', 'detail', 'participation'].includes(route.name)) refreshKey.value += 1;
 }
 
 function handleConnect() {

@@ -49,6 +49,19 @@ El panel administrador permite programar fechas de inicio y cierre; el backend c
 
 4. Abre http://localhost:5173 para usar la interfaz de desarrollo. Vite conecta la API y Socket.IO con el backend en http://localhost:3000.
 
+### Usar desde otros dispositivos en la misma red Wi-Fi
+
+1. Inicia los servicios desde la computadora que tiene el proyecto y PostgreSQL:
+
+   ```powershell
+   npm run dev
+   ```
+
+2. En esa computadora, ejecuta `ipconfig` y busca la dirección **IPv4** del adaptador Wi-Fi activo (por ejemplo, `192.168.1.25`).
+3. Desde el teléfono u otro dispositivo conectado a la misma red, abre `http://<IPv4-de-la-computadora>:5173` (por ejemplo, `http://192.168.1.25:5173`). No uses `localhost` en el otro dispositivo: esa dirección apuntaría al propio teléfono.
+
+Vite y el backend escuchan en la red local; las solicitudes de API y Socket.IO se redirigen al backend automáticamente. Si Windows muestra una alerta de Firewall al iniciar Node.js, permite el acceso en redes **privadas**. Comprueba que ambos dispositivos estén en la misma red y que el router no tenga activado el aislamiento entre dispositivos. Para la versión compilada (`npm run build` y `npm start`), usa `http://<IPv4-de-la-computadora>:3000` en lugar del puerto 5173. Esto permite acceso en la red local; no publica el sitio en Internet.
+
 Para compilar el frontend y ejecutar la aplicación servida por Express:
 
 ```powershell
@@ -67,6 +80,12 @@ Las personas con sesión iniciada pueden consultar los comprobantes guardados en
 Las cuentas votantes pueden abrir **Participación** para ver totales agregados por elección y el porcentaje general. El panel no lista personas ni relaciona cuentas con candidatos; no está disponible para visitantes sin sesión ni para administradores.
 
 Si configuras SMTP, el sistema envía un aviso de apertura a quienes aún no han votado en esa elección, un recordatorio una hora antes del cierre a quienes ya participaron y los resultados al cerrar la elección a esas mismas personas. Los destinatarios se ponen en copia oculta. Los avisos pendientes se reintentan si falla el correo. Configura `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` y `APP_URL`; sin SMTP, el resto del sitio funciona, pero no se envían avisos.
+
+## Calendario, reglas y administración
+
+El **Calendario** reúne elecciones próximas, abiertas y finalizadas. Cada elección puede publicar reglas, instrucciones y preguntas frecuentes desde el panel administrador. En borradores, **Probar vista previa** permite ensayar la selección de una opción sin registrar votos ni cambiar resultados.
+
+El panel también muestra una bitácora de cambios administrativos que no almacena la opción elegida por ningún votante. Para importar votantes, descarga la plantilla CSV con encabezados `name,email`, valídala en el panel y confirma la importación. Se admiten hasta 500 cuentas por archivo; cada persona recibe por correo un enlace de 48 horas para definir su contraseña, por lo que SMTP debe estar configurado.
 
 ## Publicar para acceder desde Internet
 

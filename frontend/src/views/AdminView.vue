@@ -15,8 +15,16 @@ const userSearch = ref('');
 const userRoleFilter = ref('all');
 const userStatusFilter = ref('all');
 const managingUserId = ref(null);
+const auditLogs = ref([]);
+const csvText = ref('');
+const csvFileName = ref('');
+const csvPreview = ref(null);
+const csvResult = ref(null);
+const importingCsv = ref(false);
 const title = ref('');
 const description = ref('');
+const rules = ref('');
+const faq = ref('');
 const startsAt = ref('');
 const endsAt = ref('');
 const candidateNames = ref({});
@@ -27,8 +35,15 @@ const addingCandidateId = ref(null);
 const changingElectionId = ref(null);
 const editingElectionId = ref(null);
 const printElection = ref(null);
+const previewElection = ref(null);
+const previewDialog = ref(null);
+const previewTrigger = ref(null);
+const previewCandidate = ref('');
+const previewMessage = ref('');
 const editTitle = ref('');
 const editDescription = ref('');
+const editRules = ref('');
+const editFaq = ref('');
 const editStartsAt = ref('');
 const editEndsAt = ref('');
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
@@ -106,12 +121,14 @@ async function load() {
   error.value = '';
   loading.value = true;
   try {
-    const [electionData, userData] = await Promise.all([
+    const [electionData, userData, auditData] = await Promise.all([
       props.api('/elections'),
       props.api('/users'),
+      props.api('/audit/admin-log'),
     ]);
     elections.value = electionData;
     users.value = userData;
+    auditLogs.value = auditData;
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -125,12 +142,16 @@ async function createElection() {
     await props.api('/elections', 'POST', {
       title: title.value,
       description: description.value,
+      rules: rules.value,
+      faq: faq.value,
       starts_at: startsAt.value ? new Date(startsAt.value).toISOString() : null,
       ends_at: endsAt.value ? new Date(endsAt.value).toISOString() : null,
     });
     props.toast('Elección creada');
     title.value = '';
     description.value = '';
+    rules.value = '';
+    faq.value = '';
     startsAt.value = '';
     endsAt.value = '';
     await load();
@@ -198,6 +219,8 @@ function beginEdit(election) {
   editingElectionId.value = election.id;
   editTitle.value = election.title;
   editDescription.value = election.description || '';
+  editRules.value = election.rules || '';
+  editFaq.value = election.faq || '';
   editStartsAt.value = toDatetimeLocal(election.starts_at);
   editEndsAt.value = toDatetimeLocal(election.ends_at);
 }
@@ -207,6 +230,8 @@ async function saveElection(electionId) {
     await props.api(`/elections/${electionId}`, 'PUT', {
       title: editTitle.value,
       description: editDescription.value,
+      rules: editRules.value,
+      faq: editFaq.value,
       starts_at: new Date(editStartsAt.value).toISOString(),
       ends_at: new Date(editEndsAt.value).toISOString(),
     });
@@ -216,6 +241,98 @@ async function saveElection(electionId) {
   } catch (err) {
     props.toast(err.message);
   }
+}
+
+async function selectCsvFile(event) {
+  const [file] = event.target.files || [];
+  if (!file) return;
+  csvPreview.value = null;
+  csvResult.value = null;
+  try {
+    csvText.value = await file.text();
+    csvFileName.value = file.name;
+  } catch (err) {
+    csvText.value = '';
+    props.toast(`No se pudo leer el archivo: ${err.message}`);
+  }
+}
+
+function downloadCsvTemplate() {
+  const blob = new Blob(['name,email\\r\\n"María Pérez",maria@example.com\\r\\n'], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'plantilla-votantes.csv';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function previewVoters() {
+  csvResult.value = null;
+  try {
+    csvPreview.value = await props.api('/users/import', 'POST', { csv: csvText.value, preview: true });
+  } catch (err) {
+    csvPreview.value = null;
+    props.toast(err.message);
+  }
+}
+
+async function importVoters() {
+  if (!csvPreview.value || csvPreview.value.errors.length || !csvPreview.value.valid_count) return;
+  if (!window.confirm(`¿Crear ${csvPreview.value.valid_count} cuentas votantes y enviarles un enlace para definir su contraseña?`)) return;
+  importingCsv.value = true;
+  try {
+    csvResult.value = await props.api('/users/import', 'POST', { csv: csvText.value });
+    csvPreview.value = null;
+    csvText.value = '';
+    csvFileName.value = '';
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  } finally {
+    importingCsv.value = false;
+  }
+}
+
+function openElectionPreview(election) {
+  previewTrigger.value = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  previewElection.value = election;
+  previewCandidate.value = '';
+  previewMessage.value = '';
+  nextTick(() => previewDialog.value?.focus());
+}
+
+function closeElectionPreview() {
+  previewElection.value = null;
+  nextTick(() => previewTrigger.value?.focus());
+}
+
+function trapPreviewFocus(event) {
+  if (event.key !== 'Tab' || !previewDialog.value) return;
+  const focusable = [...previewDialog.value.querySelectorAll(
+    'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled)'
+  )];
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === previewDialog.value)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === previewDialog.value)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function simulatePreviewVote() {
+  if (!previewCandidate.value) {
+    previewMessage.value = 'Selecciona una opción para probar la vista.';
+    return;
+  }
+  const candidate = previewElection.value.candidates.find((item) => String(item.id) === previewCandidate.value);
+  previewMessage.value = `Prueba completada para «${candidate.name}». No se registró ningún voto.`;
 }
 
 async function deleteElection(election) {
@@ -349,6 +466,10 @@ watch(() => props.refreshKey, load);
       <input id="title" v-model="title" required>
       <label for="description">Descripción</label>
       <textarea id="description" v-model="description" rows="2"></textarea>
+      <label for="election-rules">Reglas e instrucciones (opcional)</label>
+      <textarea id="election-rules" v-model="rules" rows="3" maxlength="10000"></textarea>
+      <label for="election-faq">Preguntas frecuentes (opcional)</label>
+      <textarea id="election-faq" v-model="faq" rows="3" maxlength="10000"></textarea>
       <div class="row schedule-fields">
         <div>
           <label for="starts-at">Inicio</label>
@@ -375,6 +496,10 @@ watch(() => props.refreshKey, load);
         <input :id="`edit-title-${election.id}`" v-model="editTitle" required>
         <label :for="`edit-description-${election.id}`">Descripción</label>
         <textarea :id="`edit-description-${election.id}`" v-model="editDescription" rows="2"></textarea>
+        <label :for="`edit-rules-${election.id}`">Reglas e instrucciones</label>
+        <textarea :id="`edit-rules-${election.id}`" v-model="editRules" rows="3" maxlength="10000"></textarea>
+        <label :for="`edit-faq-${election.id}`">Preguntas frecuentes</label>
+        <textarea :id="`edit-faq-${election.id}`" v-model="editFaq" rows="3" maxlength="10000"></textarea>
         <div class="row schedule-fields">
           <div><label :for="`edit-start-${election.id}`">Inicio</label><input :id="`edit-start-${election.id}`" v-model="editStartsAt" type="datetime-local" required></div>
           <div><label :for="`edit-end-${election.id}`">Cierre</label><input :id="`edit-end-${election.id}`" v-model="editEndsAt" type="datetime-local" required></div>
@@ -428,6 +553,7 @@ watch(() => props.refreshKey, load);
       </form>
       <div v-if="election.status === 'draft'" class="row election-management">
         <button class="ghost" type="button" @click="beginEdit(election)">Editar elección</button>
+        <button class="ghost" type="button" @click="openElectionPreview(election)">Probar vista previa</button>
         <button class="ghost" type="button" @click="duplicateElection(election)">Duplicar</button>
         <button class="danger" type="button" @click="deleteElection(election)">Eliminar elección</button>
       </div>
@@ -468,6 +594,37 @@ watch(() => props.refreshKey, load);
 
     <section class="card user-management">
       <h2>Administración de usuarios</h2>
+      <div class="bulk-import">
+        <h3>Importar votantes desde CSV</h3>
+        <p class="muted">Usa un archivo CSV con las columnas <code>name,email</code>. Se enviará a cada cuenta un enlace para definir su contraseña.</p>
+        <button type="button" class="ghost" @click="downloadCsvTemplate">Descargar plantilla CSV</button>
+        <label for="voter-csv">Archivo CSV</label>
+        <input id="voter-csv" type="file" accept=".csv,text/csv" @change="selectCsvFile">
+        <p v-if="csvFileName" class="muted">Archivo: {{ csvFileName }}</p>
+        <div class="row">
+          <button type="button" :disabled="!csvText" @click="previewVoters">Validar archivo</button>
+          <button
+            v-if="csvPreview?.valid_count && !csvPreview.errors.length"
+            type="button"
+            :disabled="importingCsv"
+            @click="importVoters"
+          >{{ importingCsv ? 'Importando…' : `Importar ${csvPreview.valid_count} cuentas` }}</button>
+        </div>
+        <div v-if="csvPreview" class="import-preview" aria-live="polite">
+          <p>{{ csvPreview.valid_count }} cuentas listas para importar.</p>
+          <ul v-if="csvPreview.errors.length" class="import-errors" role="alert">
+            <li v-for="(item, index) in csvPreview.errors" :key="`${item.line}-${index}`">
+              Fila {{ item.line }}: {{ item.message }}
+            </li>
+          </ul>
+        </div>
+        <p v-if="csvResult" class="msg ok" role="status">
+          Se crearon {{ csvResult.created }} cuentas.
+          <span v-if="csvResult.invitationFailures.length">
+            No se pudieron enviar {{ csvResult.invitationFailures.length }} invitaciones; revisa la configuración SMTP e inténtalo con recuperación de contraseña.
+          </span>
+        </p>
+      </div>
       <div class="row user-filters">
         <input v-model="userSearch" type="search" placeholder="Buscar por nombre o correo" aria-label="Buscar usuarios">
         <select v-model="userRoleFilter" aria-label="Filtrar por rol">
@@ -510,6 +667,55 @@ watch(() => props.refreshKey, load);
         </div>
       </div>
     </section>
+
+    <section class="card audit-log" aria-labelledby="audit-log-heading">
+      <h2 id="audit-log-heading">Bitácora de administración</h2>
+      <p class="muted">Registra cambios administrativos; no almacena la opción elegida por ningún votante.</p>
+      <p v-if="!auditLogs.length" class="muted">Aún no hay acciones registradas.</p>
+      <ol v-else class="audit-list">
+        <li v-for="entry in auditLogs" :key="entry.id">
+          <div class="row between">
+            <strong>{{ entry.summary }}</strong>
+            <time :datetime="entry.created_at">{{ new Date(entry.created_at).toLocaleString() }}</time>
+          </div>
+          <span class="muted">{{ entry.actor_name || 'Cuenta eliminada' }} · {{ entry.action }}</span>
+        </li>
+      </ol>
+    </section>
+
+    <div v-if="previewElection" class="preview-backdrop" @click.self="closeElectionPreview">
+      <section
+        ref="previewDialog"
+        class="card election-preview"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="preview-heading"
+        tabindex="-1"
+        @keydown.esc="closeElectionPreview"
+        @keydown="trapPreviewFocus"
+      >
+        <div class="row between">
+          <h2 id="preview-heading">Vista previa de prueba</h2>
+          <button type="button" class="ghost" @click="closeElectionPreview">Cerrar</button>
+        </div>
+        <p class="badge draft">Simulación: no se guardan votos</p>
+        <h3>{{ previewElection.title }}</h3>
+        <p class="muted">{{ previewElection.description }}</p>
+        <p v-if="previewElection.rules"><strong>Reglas e instrucciones</strong><br>{{ previewElection.rules }}</p>
+        <p v-if="previewElection.faq"><strong>Preguntas frecuentes</strong><br>{{ previewElection.faq }}</p>
+        <fieldset v-if="previewElection.candidates.length" class="preview-options">
+          <legend>Prueba el paso de selección</legend>
+          <label v-for="candidate in previewElection.candidates" :key="candidate.id" class="preview-option">
+            <input v-model="previewCandidate" type="radio" name="preview-candidate" :value="String(candidate.id)">
+            {{ candidate.name }}
+            <span v-if="candidate.description" class="muted">{{ candidate.description }}</span>
+          </label>
+          <button type="button" @click="simulatePreviewVote">Probar selección</button>
+        </fieldset>
+        <p v-else class="msg bad" role="status">Agrega candidatos para probar la boleta.</p>
+        <p v-if="previewMessage" class="msg ok" role="status" aria-live="polite">{{ previewMessage }}</p>
+      </section>
+    </div>
   </template>
 </template>
 
@@ -630,6 +836,84 @@ watch(() => props.refreshKey, load);
 
 .user-management {
   margin-top: 18px;
+}
+
+.bulk-import {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.bulk-import code {
+  font-weight: 700;
+}
+
+.import-preview {
+  margin-top: 12px;
+}
+
+.import-errors {
+  max-height: 180px;
+  overflow: auto;
+  color: var(--bad);
+}
+
+.audit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audit-list li {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.audit-list time {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.preview-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  overflow-y: auto;
+  place-items: center;
+  padding: 20px;
+  background: rgb(26 20 34 / 58%);
+}
+
+.election-preview {
+  width: min(100%, 640px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.preview-options {
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.preview-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 10px 0;
+}
+
+.preview-option input {
+  width: auto;
+  margin: 4px 0 0;
+}
+
+.preview-option span {
+  margin-left: auto;
 }
 
 .user-filters {

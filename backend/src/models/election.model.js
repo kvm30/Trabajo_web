@@ -3,7 +3,7 @@ const pool = require('../config/db');
 const ElectionModel = {
   async findAll() {
     const { rows } = await pool.query(`
-      SELECT e.id, e.title, e.description,
+      SELECT e.id, e.title, e.description, e.rules, e.faq,
              CASE
                WHEN e.status = 'closed' OR e.ends_at <= NOW() THEN 'closed'
                WHEN e.starts_at > NOW() THEN 'draft'
@@ -73,7 +73,7 @@ const ElectionModel = {
 
   async findById(id) {
     const { rows } = await pool.query(
-      `SELECT e.id, e.title, e.description,
+      `SELECT e.id, e.title, e.description, e.rules, e.faq,
               CASE
                 WHEN e.status = 'closed' OR e.ends_at <= NOW() THEN 'closed'
                 WHEN e.starts_at > NOW() THEN 'draft'
@@ -88,11 +88,11 @@ const ElectionModel = {
     return rows[0] || null;
   },
 
-  async create({ title, description, starts_at: startsAt, ends_at: endsAt }, userId) {
+  async create({ title, description, rules, faq, starts_at: startsAt, ends_at: endsAt }, userId) {
     const { rows } = await pool.query(
-      `INSERT INTO elections (title, description, starts_at, ends_at, created_by)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [title, description || null, startsAt || null, endsAt || null, userId]);
+      `INSERT INTO elections (title, description, rules, faq, starts_at, ends_at, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [title, description || null, rules || null, faq || null, startsAt || null, endsAt || null, userId]);
     return rows[0];
   },
 
@@ -107,11 +107,11 @@ const ElectionModel = {
     return rows[0] || null;
   },
 
-  async update(id, { title, description, starts_at, ends_at }) {
+  async update(id, { title, description, rules, faq, starts_at, ends_at }) {
     const { rows } = await pool.query(
-      `UPDATE elections SET title = $1, description = $2, starts_at = $3, ends_at = $4
-       WHERE id = $5 AND status = 'draft' RETURNING *`,
-      [title, description || null, starts_at, ends_at, id]
+      `UPDATE elections SET title = $1, description = $2, rules = $3, faq = $4, starts_at = $5, ends_at = $6
+       WHERE id = $7 AND status = 'draft' RETURNING *`,
+      [title, description || null, rules || null, faq || null, starts_at, ends_at, id]
     );
     return rows[0] || null;
   },
@@ -128,7 +128,7 @@ const ElectionModel = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const source = await client.query('SELECT title, description, starts_at, ends_at FROM elections WHERE id = $1 AND status = $2', [id, 'draft']);
+      const source = await client.query('SELECT title, description, rules, faq, starts_at, ends_at FROM elections WHERE id = $1 AND status = $2', [id, 'draft']);
       if (!source.rows[0]) {
         await client.query('ROLLBACK');
         return null;
@@ -141,9 +141,10 @@ const ElectionModel = {
       const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const endsAt = new Date(startsAt.getTime() + duration);
       const created = await client.query(
-        `INSERT INTO elections (title, description, starts_at, ends_at, created_by)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [`${source.rows[0].title} (copia)`, source.rows[0].description, startsAt, endsAt, userId]
+        `INSERT INTO elections (title, description, rules, faq, starts_at, ends_at, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [`${source.rows[0].title} (copia)`, source.rows[0].description, source.rows[0].rules,
+          source.rows[0].faq, startsAt, endsAt, userId]
       );
       await client.query(
         `INSERT INTO candidates (election_id, name, description)

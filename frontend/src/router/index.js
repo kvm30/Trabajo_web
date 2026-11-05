@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import AdminView from '../views/AdminView.vue';
+import CalendarView from '../views/CalendarView.vue';
 import DetailView from '../views/DetailView.vue';
 import ElectionsView from '../views/ElectionsView.vue';
 import HistoryView from '../views/HistoryView.vue';
@@ -10,6 +11,7 @@ import VerifyView from '../views/VerifyView.vue';
 
 const routes = [
   { path: '/', name: 'elections', component: ElectionsView },
+  { path: '/calendar', name: 'calendar', component: CalendarView },
   { path: '/elections/:id', name: 'detail', component: DetailView },
   { path: '/history', name: 'history', component: HistoryView },
   { path: '/participation', name: 'participation', component: ParticipationView },

@@ -1,10 +1,20 @@
 const ElectionModel = require('../models/election.model');
+const AdminAuditModel = require('../models/adminAudit.model');
 const NotificationModel = require('../models/notification.model');
 const VoteModel = require('../models/vote.model');
 const socket = require('../socket');
 
 const fail = (res, err) =>
   res.status(err.status || 500).json({ success: false, message: err.message });
+
+function validateElectionText(body) {
+  for (const field of ['rules', 'faq']) {
+    if (body[field] != null && (typeof body[field] !== 'string' || body[field].length > 10000)) {
+      return `${field} debe ser texto de máximo 10.000 caracteres`;
+    }
+  }
+  return null;
+}
 
 function parseSchedule(startsAt, endsAt) {
   const starts = startsAt ? new Date(startsAt) : null;
@@ -48,6 +58,8 @@ const ElectionController = {
   async create(req, res) {
     try {
       if (!req.body.title?.trim()) return res.status(400).json({ success: false, message: 'title es requerido' });
+      const textError = validateElectionText(req.body);
+      if (textError) return res.status(400).json({ success: false, message: textError });
       const { starts, ends } = parseSchedule(req.body.starts_at, req.body.ends_at);
       if (starts <= new Date()) {
         return res.status(400).json({ success: false, message: 'La fecha de inicio debe ser futura' });
@@ -58,6 +70,7 @@ const ElectionController = {
         starts_at: starts.toISOString(),
         ends_at: ends.toISOString(),
       }, req.user.id);
+      await AdminAuditModel.record(req.user.id, 'election.created', 'election', e.id, `Creó la elección ${e.title}`);
       socket.emitElectionsChanged();
       res.status(201).json({ success: true, data: e });
     } catch (err) { fail(res, err); }
@@ -81,6 +94,7 @@ const ElectionController = {
       if (!updated) {
         return res.status(400).json({ success: false, message: 'No se puede programar una elección que ya tiene votos' });
       }
+      await AdminAuditModel.record(req.user.id, 'election.schedule_updated', 'election', req.params.id, `Actualizó el calendario de ${election.title}`);
       socket.emitElectionsChanged();
       res.json({ success: true, data: updated });
     } catch (err) { fail(res, err); }
@@ -96,15 +110,19 @@ const ElectionController = {
       if (!req.body.title?.trim()) {
         return res.status(400).json({ success: false, message: 'title es requerido' });
       }
+      const textError = validateElectionText(req.body);
+      if (textError) return res.status(400).json({ success: false, message: textError });
       const { starts, ends } = parseSchedule(req.body.starts_at, req.body.ends_at);
       if (starts <= new Date()) {
         return res.status(400).json({ success: false, message: 'La fecha de inicio debe ser futura' });
       }
       const election = await ElectionModel.update(req.params.id, {
         title: req.body.title.trim(), description: req.body.description,
+        rules: req.body.rules, faq: req.body.faq,
         starts_at: starts.toISOString(), ends_at: ends.toISOString(),
       });
       if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden editar elecciones en borrador' });
+      await AdminAuditModel.record(req.user.id, 'election.updated', 'election', election.id, `Editó la elección ${election.title}`);
       socket.emitElectionsChanged();
       res.json({ success: true, data: election });
     } catch (err) { fail(res, err); }
@@ -114,6 +132,7 @@ const ElectionController = {
     try {
       const election = await ElectionModel.remove(req.params.id);
       if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden eliminar elecciones en borrador' });
+      await AdminAuditModel.record(req.user.id, 'election.deleted', 'election', req.params.id, 'Eliminó una elección en borrador');
       socket.emitElectionsChanged();
       res.json({ success: true, data: election, message: 'Elección eliminada' });
     } catch (err) { fail(res, err); }
@@ -123,6 +142,7 @@ const ElectionController = {
     try {
       const election = await ElectionModel.duplicate(req.params.id, req.user.id);
       if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden duplicar elecciones en borrador' });
+      await AdminAuditModel.record(req.user.id, 'election.duplicated', 'election', election.id, `Duplicó una elección como ${election.title}`);
       socket.emitElectionsChanged();
       res.status(201).json({ success: true, data: election });
     } catch (err) { fail(res, err); }
@@ -137,6 +157,7 @@ const ElectionController = {
         return res.status(400).json({ success: false, message: 'Solo se agregan candidatos en borrador' });
       }
       const c = await ElectionModel.addCandidate(election.id, req.body);
+      await AdminAuditModel.record(req.user.id, 'candidate.created', 'election', election.id, `Agregó un candidato a ${election.title}`);
       socket.emitResults(election.id, await ElectionModel.results(election.id));
       res.status(201).json({ success: true, data: c });
     } catch (err) { fail(res, err); }
@@ -149,6 +170,7 @@ const ElectionController = {
         name: req.body.name.trim(), description: req.body.description,
       });
       if (!candidate) return res.status(400).json({ success: false, message: 'Solo se editan candidatos de elecciones en borrador' });
+      await AdminAuditModel.record(req.user.id, 'candidate.updated', 'election', req.params.id, 'Editó un candidato');
       socket.emitElectionsChanged();
       res.json({ success: true, data: candidate });
     } catch (err) { fail(res, err); }
@@ -158,6 +180,7 @@ const ElectionController = {
     try {
       const candidate = await ElectionModel.removeCandidate(req.params.candidateId, req.params.id);
       if (!candidate) return res.status(400).json({ success: false, message: 'Solo se eliminan candidatos de elecciones en borrador' });
+      await AdminAuditModel.record(req.user.id, 'candidate.deleted', 'election', req.params.id, 'Eliminó un candidato');
       socket.emitElectionsChanged();
       res.json({ success: true, data: candidate });
     } catch (err) { fail(res, err); }
@@ -198,6 +221,7 @@ const ElectionController = {
       }
       const e = await ElectionModel.setStatus(req.params.id, status);
       if (!e) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
+      await AdminAuditModel.record(req.user.id, 'election.status_changed', 'election', e.id, `Cambió el estado de ${e.title} a ${status}`);
       if (status === 'open' || status === 'closed') {
         try {
           await NotificationModel.enqueue(req.params.id, status === 'open' ? 'opened' : 'results');

@@ -52,7 +52,24 @@ const schema = [
     columns: [
       { name: 'starts_at', def: 'TIMESTAMPTZ' },
       { name: 'ends_at', def: 'TIMESTAMPTZ' },
+      { name: 'rules', def: 'TEXT' },
+      { name: 'faq', def: 'TEXT' },
     ],
+  },
+  {
+    table: 'admin_audit_log',
+    create: `
+      CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id BIGSERIAL PRIMARY KEY,
+        actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        action VARCHAR(80) NOT NULL,
+        entity_type VARCHAR(40) NOT NULL,
+        entity_id VARCHAR(80),
+        summary TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `,
+    columns: [],
   },
   {
     table: 'election_notification_outbox',
@@ -174,6 +191,7 @@ async function runMigrations() {
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_user_type_election
     ON notifications(user_id, type, election_id) WHERE user_id IS NOT NULL`);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created ON admin_audit_log(created_at DESC, id DESC)');
   await seedAdmin();
 }
 

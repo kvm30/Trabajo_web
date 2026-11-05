@@ -1,5 +1,8 @@
 const bcrypt = require('bcryptjs');
+const AdminAuditModel = require('../models/adminAudit.model');
 const UserModel = require('../models/user.model');
+const parseCsv = require('../utils/csv');
+const { isSmtpConfigured, sendAccountSetupEmail } = require('../utils/email');
 const { sign } = require('../middleware/auth');
 
 function validEmail(value) {
@@ -14,6 +17,96 @@ function validPassword(value) {
 }
 
 const UserController = {
+  async importVoters(req, res) {
+    try {
+      if (typeof req.body.csv !== 'string' || req.body.csv.length > 256_000) {
+        return res.status(400).json({ success: false, message: 'El CSV es obligatorio y no puede superar 256 KB' });
+      }
+
+      let parsed;
+      try {
+        parsed = parseCsv(req.body.csv);
+      } catch (err) {
+        return res.status(400).json({ success: false, message: err.message });
+      }
+      if (parsed.length < 2) {
+        return res.status(400).json({ success: false, message: 'El CSV debe incluir encabezado name,email y al menos una persona' });
+      }
+      const headers = parsed[0].map((header) => header.toLowerCase());
+      if (headers.length !== 2 || headers[0] !== 'name' || headers[1] !== 'email') {
+        return res.status(400).json({ success: false, message: 'El encabezado debe ser exactamente: name,email' });
+      }
+      if (parsed.length - 1 > 500) {
+        return res.status(400).json({ success: false, message: 'Puedes importar hasta 500 personas por archivo' });
+      }
+
+      const errors = [];
+      const rows = [];
+      const seen = new Set();
+      for (let index = 1; index < parsed.length; index += 1) {
+        const [rawName = '', rawEmail = '', ...extra] = parsed[index];
+        const name = rawName.trim();
+        const email = rawEmail.trim().toLowerCase();
+        const line = index + 1;
+        if (extra.length || parsed[index].length !== 2) {
+          errors.push({ line, message: 'Cada fila debe tener solo nombre y correo' });
+        } else if (name.length < 2 || name.length > 100) {
+          errors.push({ line, message: 'El nombre debe tener entre 2 y 100 caracteres' });
+        } else if (email.length > 150 || !validEmail(email)) {
+          errors.push({ line, message: 'El correo no es válido' });
+        } else if (seen.has(email)) {
+          errors.push({ line, message: 'El correo está repetido en el archivo' });
+        } else {
+          seen.add(email);
+          rows.push({ line, name, email });
+        }
+      }
+
+      const existingEmails = new Set(await UserModel.findExistingEmails(rows.map((row) => row.email)));
+      const validRows = rows.filter((row) => {
+        if (!existingEmails.has(row.email)) return true;
+        errors.push({ line: row.line, message: 'El correo ya está registrado' });
+        return false;
+      });
+      const preview = { valid_count: validRows.length, errors, users: validRows.map(({ name, email }) => ({ name, email })) };
+      if (req.body.preview === true) {
+        return res.json({ success: true, data: preview });
+      }
+      if (errors.length) {
+        return res.status(400).json({ success: false, message: 'Corrige los errores del CSV antes de importar', data: preview });
+      }
+      if (!validRows.length) {
+        return res.status(400).json({ success: false, message: 'El archivo no contiene personas válidas' });
+      }
+      if (!isSmtpConfigured()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Configura SMTP para enviar los enlaces de activación antes de importar votantes',
+        });
+      }
+
+      const created = await UserModel.createInvitedVoters(validRows, req.user.id);
+      const appUrl = (process.env.APP_URL || 'http://localhost:5173').replace(/\/+$/, '');
+      const invitationFailures = [];
+      for (const user of created) {
+        const setupUrl = `${appUrl}/reset-password?token=${encodeURIComponent(user.token)}`;
+        try {
+          await sendAccountSetupEmail(user.email, setupUrl);
+        } catch (err) {
+          console.error(`No se pudo enviar la invitación a ${user.email}:`, err.message);
+          invitationFailures.push(user.email);
+        }
+      }
+      res.status(201).json({
+        success: true,
+        data: { created: created.length, invitationFailures },
+      });
+    } catch (err) {
+      console.error('No se pudieron importar las cuentas votantes:', err.message);
+      res.status(500).json({ success: false, message: 'No se pudieron importar las cuentas votantes' });
+    }
+  },
+
   async getMe(req, res) {
     try {
       const user = await UserModel.findById(req.user.id);
@@ -121,6 +214,7 @@ const UserController = {
 
       const user = await UserModel.update(req.params.id, { name, email });
       if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      await AdminAuditModel.record(req.user.id, 'user.updated', 'user', user.id, `Actualizó la cuenta de ${user.name}`);
       res.json({ success: true, data: user });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -138,6 +232,7 @@ const UserController = {
       }
       const user = await UserModel.setRole(req.params.id, role);
       if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      await AdminAuditModel.record(req.user.id, 'user.role_changed', 'user', user.id, `Cambió el rol de ${user.name} a ${role}`);
       res.json({ success: true, data: user });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -154,6 +249,7 @@ const UserController = {
       }
       const user = await UserModel.setActive(req.params.id, req.body.active);
       if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      await AdminAuditModel.record(req.user.id, 'user.status_changed', 'user', user.id, `${req.body.active ? 'Activó' : 'Desactivó'} la cuenta de ${user.name}`);
       res.json({ success: true, data: user });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -167,6 +263,7 @@ const UserController = {
       }
       const user = await UserModel.delete(req.params.id);
       if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      await AdminAuditModel.record(req.user.id, 'user.deleted', 'user', user.id, 'Eliminó una cuenta de usuario');
       res.json({ success: true, message: 'Usuario eliminado correctamente' });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });

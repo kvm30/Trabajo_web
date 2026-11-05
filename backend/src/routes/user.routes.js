@@ -78,6 +78,8 @@ router.get('/', auth, admin, UserController.getAll);
 
 /** Obtener perfil autenticado */
 router.get('/me', auth, UserController.getMe);
+/** Importar cuentas votantes desde CSV (name,email) */
+router.post('/import', auth, admin, UserController.importVoters);
 /** Actualizar datos personales */
 router.put('/me', auth, UserController.updateMe);
 /** Cambiar contraseña autenticado */

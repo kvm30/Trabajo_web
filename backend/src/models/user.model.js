@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const UserModel = {
   async findAll() {
@@ -61,6 +62,53 @@ const UserModel = {
       [name, email, hashed]
     );
     return rows[0];
+  },
+
+  async findExistingEmails(emails) {
+    if (!emails.length) return [];
+    const { rows } = await pool.query(
+      'SELECT LOWER(email) AS email FROM users WHERE LOWER(email) = ANY($1::text[])',
+      [emails]
+    );
+    return rows.map((row) => row.email);
+  },
+
+  async createInvitedVoters(users, actorId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const created = [];
+      for (const user of users) {
+        const password = crypto.randomBytes(48).toString('base64url');
+        const passwordHash = await bcrypt.hash(password, 10);
+        const token = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const { rows } = await client.query(
+          `INSERT INTO users (name, email, password, role)
+           VALUES ($1, $2, $3, 'voter')
+           RETURNING id, name, email`,
+          [user.name, user.email, passwordHash]
+        );
+        await client.query(
+          `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+           VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '48 hours')`,
+          [rows[0].id, tokenHash]
+        );
+        created.push({ ...rows[0], token });
+      }
+      await client.query(
+        `INSERT INTO admin_audit_log (actor_id, action, entity_type, summary)
+         VALUES ($1, 'voters.imported', 'users', $2)`,
+        [actorId, `Importó ${created.length} cuentas votantes`]
+      );
+      await client.query('COMMIT');
+      return created;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   async update(id, { name, email }) {

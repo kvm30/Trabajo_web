@@ -23,6 +23,16 @@ async function sendPasswordResetEmail(email, resetUrl) {
   });
 }
 
+async function sendAccountSetupEmail(email, setupUrl) {
+  const { SMTP_FROM } = process.env;
+  await createTransporter().sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: 'Activa tu cuenta de votación',
+    text: `Se creó una cuenta votante para ti. Define tu contraseña desde este enlace, válido durante 48 horas: ${setupUrl}`,
+  });
+}
+
 async function sendElectionNotificationEmail(recipients, subject, text) {
   if (!recipients.length) return;
   const { SMTP_FROM } = process.env;
@@ -35,4 +45,14 @@ async function sendElectionNotificationEmail(recipients, subject, text) {
   });
 }
 
-module.exports = { sendPasswordResetEmail, sendElectionNotificationEmail };
+function isSmtpConfigured() {
+  return ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM']
+    .every((key) => Boolean(process.env[key]));
+}
+
+module.exports = {
+  sendPasswordResetEmail,
+  sendAccountSetupEmail,
+  sendElectionNotificationEmail,
+  isSmtpConfigured,
+};

@@ -26,6 +26,8 @@ frontend/
 4. Abre http://localhost:5173 para la interfaz de desarrollo · Swagger: http://localhost:3000/api-docs
 5. Las tablas se crean solas al arrancar y se crea el usuario admin.
 
+Para abrir el sitio desde otro dispositivo de la misma red Wi-Fi, sigue los pasos de [acceso en red local](../README.md#usar-desde-otros-dispositivos-en-la-misma-red-wi-fi).
+
 ## Recuperación de contraseña
 
 Configura `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` y `SMTP_FROM` en `backend/.env` para habilitar el envío de enlaces de recuperación. Usa `SMTP_SECURE=true` con proveedores que requieren TLS directo (normalmente puerto 465); para el puerto 587, usa `SMTP_SECURE=false`. Define `APP_URL` con la URL pública del frontend (en local, `http://localhost:5173`). Los enlaces vencen en una hora y solo pueden utilizarse una vez.
@@ -37,6 +39,10 @@ El sistema mantiene separadas la participación (`voter_participation`) y la sel
 El panel de administración permite programar y editar elecciones, administrar cuentas, y exportar resultados como CSV o imprimirlos/guardarlos como PDF. Las elecciones programadas se abren y cierran automáticamente.
 
 Las notificaciones dentro del sitio informan sobre cambios de elecciones. Si configuras SMTP, también se envían avisos de apertura a quienes aún no han votado, recordatorios una hora antes del cierre y resultados al cerrar la elección. Los destinatarios del correo se ponen en copia oculta y los avisos pendientes se reintentan si falla el envío.
+
+La sección **Calendario** agrupa elecciones próximas, abiertas y finalizadas. El administrador puede definir reglas e instrucciones y preguntas frecuentes, y probar una vista previa sin emitir votos reales. La bitácora registra acciones administrativas, nunca la opción por la que se votó.
+
+La importación CSV requiere encabezados `name,email`, limita cada archivo a 500 personas y necesita SMTP para enviar los enlaces de configuración de contraseña (válidos por 48 horas). El modo de validación muestra filas inválidas o correos existentes antes de crear cuentas.
 
 Para iniciar solamente un servicio usa `npm run dev:backend` o `npm run dev:frontend`. Vite usa el backend en `http://localhost:3000` como proxy para la API y Socket.IO.
 

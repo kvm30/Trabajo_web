@@ -1,6 +1,10 @@
 const { Router } = require('express');
 const C = require('../controllers/audit.controller');
+const AdminAuditController = require('../controllers/adminAudit.controller');
+const { auth, admin } = require('../middleware/auth');
 const router = Router();
+
+router.get('/admin-log', auth, admin, AdminAuditController.list);
 
 /**
  * @swagger
