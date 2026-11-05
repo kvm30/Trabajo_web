@@ -22,6 +22,10 @@ const chainRows = ref([]);
 const chainVisible = ref(false);
 const error = ref('');
 const busy = ref(false);
+const confirmationVisible = ref(false);
+const selectedCandidateName = computed(() => election.value?.candidates?.find(
+  (candidate) => String(candidate.id) === selectedCandidate.value,
+)?.name || '');
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
 const now = ref(Date.now());
 let timer = null;
@@ -64,14 +68,17 @@ async function load() {
   }
 }
 
-async function vote() {
+function openVoteConfirmation() {
   if (!selectedCandidate.value) {
     props.toast('Elige un candidato');
     return;
   }
-  if (!confirm('Tu voto es definitivo y anónimo. ¿Confirmar?')) return;
+  confirmationVisible.value = true;
+}
 
+async function vote() {
   busy.value = true;
+  confirmationVisible.value = false;
   try {
     const savedReceipt = await props.api(`/elections/${election.value.id}/vote`, 'POST', {
       candidate_id: Number(selectedCandidate.value),
@@ -85,6 +92,10 @@ async function vote() {
   } finally {
     busy.value = false;
   }
+}
+
+function handleEscape(event) {
+  if (event.key === 'Escape') confirmationVisible.value = false;
 }
 
 async function verifyIntegrity() {
@@ -123,10 +134,12 @@ async function copyReceipt() {
 onMounted(() => {
  load();
  timer = window.setInterval(() => { now.value = Date.now(); }, 60000);
+ window.addEventListener('keydown', handleEscape);
 });
 onBeforeUnmount(() => {
  props.joinRoom(null);
  window.clearInterval(timer);
+ window.removeEventListener('keydown', handleEscape);
 });
 watch(() => props.refreshKey, load);
 watch(() => props.liveResults, (data) => {
@@ -184,7 +197,7 @@ watch(() => props.liveResults, (data) => {
             {{ candidate.name }}
             <div class="muted">{{ candidate.description }}</div>
           </label>
-          <button :disabled="busy" @click="vote">Emitir voto</button>
+          <button :disabled="busy" @click="openVoteConfirmation">Revisar voto</button>
         </template>
       </template>
       <div v-else class="msg" :class="{ bad: election.status === 'closed' }">
@@ -223,10 +236,63 @@ watch(() => props.liveResults, (data) => {
         <span v-if="chainRows.length === 0">Sin votos</span>
       </div>
     </div>
+
+    <div
+      v-if="confirmationVisible"
+      class="vote-confirmation-overlay"
+      role="presentation"
+      @click.self="confirmationVisible = false"
+      @keydown.esc="confirmationVisible = false"
+    >
+      <section class="card vote-confirmation" role="dialog" aria-modal="true" aria-labelledby="vote-confirmation-title">
+        <h3 id="vote-confirmation-title">Confirma tu voto</h3>
+        <p class="muted">Tu elección será:</p>
+        <strong class="vote-confirmation-candidate">{{ selectedCandidateName }}</strong>
+        <p class="vote-confirmation-warning">Esta acción es definitiva. No podrás cambiar tu voto después.</p>
+        <div class="row vote-confirmation-actions">
+          <button class="ghost" :disabled="busy" @click="confirmationVisible = false">Volver y cambiar</button>
+          <button :disabled="busy" @click="vote">Confirmar y emitir voto</button>
+        </div>
+      </section>
+    </div>
   </template>
 </template>
 
 <style scoped>
+.vote-confirmation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(25 18 32 / 58%);
+}
+
+.vote-confirmation {
+  width: min(460px, 100%);
+  margin: 0;
+  text-align: center;
+}
+
+.vote-confirmation-candidate {
+  display: block;
+  margin: 10px 0 14px;
+  color: var(--brand);
+  font-size: 1.25rem;
+}
+
+.vote-confirmation-warning {
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+}
+
+.vote-confirmation-actions {
+  justify-content: center;
+  margin-top: 16px;
+}
+
 .detail-heading {
   margin-top: 12px;
 }
@@ -237,5 +303,15 @@ watch(() => props.liveResults, (data) => {
 
 .receipt {
   border-color: var(--ok);
+}
+
+@media (max-width: 520px) {
+  .vote-confirmation-actions {
+    flex-direction: column;
+  }
+
+  .vote-confirmation-actions button {
+    width: 100%;
+  }
 }
 </style>
