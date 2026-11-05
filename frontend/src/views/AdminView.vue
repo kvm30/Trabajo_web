@@ -25,6 +25,11 @@ const loading = ref(false);
 const creating = ref(false);
 const addingCandidateId = ref(null);
 const changingElectionId = ref(null);
+const editingElectionId = ref(null);
+const editTitle = ref('');
+const editDescription = ref('');
+const editStartsAt = ref('');
+const editEndsAt = ref('');
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
 function formatSchedule(value) {
   if (!value) return 'No definida';
@@ -134,6 +139,82 @@ async function changeStatus(electionId, status) {
   }
 }
 
+function toDatetimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+}
+
+function beginEdit(election) {
+  editingElectionId.value = election.id;
+  editTitle.value = election.title;
+  editDescription.value = election.description || '';
+  editStartsAt.value = toDatetimeLocal(election.starts_at);
+  editEndsAt.value = toDatetimeLocal(election.ends_at);
+}
+
+async function saveElection(electionId) {
+  try {
+    await props.api(`/elections/${electionId}`, 'PUT', {
+      title: editTitle.value,
+      description: editDescription.value,
+      starts_at: new Date(editStartsAt.value).toISOString(),
+      ends_at: new Date(editEndsAt.value).toISOString(),
+    });
+    editingElectionId.value = null;
+    props.toast('Elección actualizada');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function deleteElection(election) {
+  if (!window.confirm(`¿Eliminar permanentemente la elección "${election.title}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await props.api(`/elections/${election.id}`, 'DELETE');
+    props.toast('Elección eliminada');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function duplicateElection(election) {
+  try {
+    await props.api(`/elections/${election.id}/duplicate`, 'POST');
+    props.toast('Elección duplicada para mañana');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function editCandidate(electionId, candidate) {
+  const name = window.prompt('Nombre del candidato', candidate.name);
+  if (name === null || !name.trim()) return;
+  const description = window.prompt('Descripción del candidato', candidate.description || '') ?? candidate.description;
+  try {
+    await props.api(`/elections/${electionId}/candidates/${candidate.id}`, 'PUT', { name: name.trim(), description });
+    props.toast('Candidato actualizado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function deleteCandidate(electionId, candidate) {
+  if (!window.confirm(`¿Eliminar al candidato "${candidate.name}"?`)) return;
+  try {
+    await props.api(`/elections/${electionId}/candidates/${candidate.id}`, 'DELETE');
+    props.toast('Candidato eliminado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
 async function changeUserRole(user, role) {
   if (!window.confirm(`¿Cambiar el rol de "${user.name}" a ${role === 'admin' ? 'administrador' : 'votante'}?`)) return;
   managingUserId.value = user.id;
@@ -237,11 +318,33 @@ watch(() => props.refreshKey, load);
         <h3 class="election-title">{{ election.title }}</h3>
         <span class="badge" :class="election.status">{{ statusLabels[election.status] }}</span>
       </div>
-      <p v-if="election.description" class="muted">{{ election.description }}</p>
-      <p class="muted schedule-label"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }}<br><b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
+      <form v-if="editingElectionId === election.id" class="card election-edit" @submit.prevent="saveElection(election.id)">
+        <label :for="`edit-title-${election.id}`">Título</label>
+        <input :id="`edit-title-${election.id}`" v-model="editTitle" required>
+        <label :for="`edit-description-${election.id}`">Descripción</label>
+        <textarea :id="`edit-description-${election.id}`" v-model="editDescription" rows="2"></textarea>
+        <div class="row schedule-fields">
+          <div><label :for="`edit-start-${election.id}`">Inicio</label><input :id="`edit-start-${election.id}`" v-model="editStartsAt" type="datetime-local" required></div>
+          <div><label :for="`edit-end-${election.id}`">Cierre</label><input :id="`edit-end-${election.id}`" v-model="editEndsAt" type="datetime-local" required></div>
+        </div>
+        <div class="row"><button type="submit">Guardar cambios</button><button type="button" class="ghost" @click="editingElectionId = null">Cancelar</button></div>
+      </form>
+      <template v-else>
+        <p v-if="election.description" class="muted">{{ election.description }}</p>
+        <p class="muted schedule-label"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }}<br><b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
+      </template>
       <div class="election-metrics muted">
         <span>{{ election.total_candidates }} {{ election.total_candidates === 1 ? 'candidato' : 'candidatos' }}</span>
         <span>{{ election.total_votes }} {{ election.total_votes === 1 ? 'voto emitido' : 'votos emitidos' }}</span>
+      </div>
+      <div v-if="election.status === 'draft' && election.candidates?.length" class="candidate-list">
+        <div v-for="candidate in election.candidates" :key="candidate.id" class="row between candidate-row">
+          <span><b>{{ candidate.name }}</b><small v-if="candidate.description" class="muted"> — {{ candidate.description }}</small></span>
+          <div class="row">
+            <button type="button" class="ghost" @click="editCandidate(election.id, candidate)" :aria-label="`Editar ${candidate.name}`">Editar</button>
+            <button type="button" class="danger" @click="deleteCandidate(election.id, candidate)" :aria-label="`Eliminar ${candidate.name}`">Eliminar</button>
+          </div>
+        </div>
       </div>
       <form v-if="election.status === 'draft'" class="row" @submit.prevent="addCandidate(election.id)">
         <input
@@ -255,6 +358,11 @@ watch(() => props.refreshKey, load);
           {{ addingCandidateId === election.id ? 'Agregando…' : '+ Candidato' }}
         </button>
       </form>
+      <div v-if="election.status === 'draft'" class="row election-management">
+        <button class="ghost" type="button" @click="beginEdit(election)">Editar elección</button>
+        <button class="ghost" type="button" @click="duplicateElection(election)">Duplicar</button>
+        <button class="danger" type="button" @click="deleteElection(election)">Eliminar elección</button>
+      </div>
       <div class="row status-actions">
         <button
           v-for="status in ['draft', 'open', 'closed'].filter((item) => item !== election.status)"
@@ -375,6 +483,24 @@ watch(() => props.refreshKey, load);
 
 .status-actions {
   margin-top: 10px;
+}
+
+.election-edit {
+  margin: 12px 0;
+  box-shadow: none;
+}
+
+.election-management {
+  margin-top: 12px;
+}
+
+.candidate-list {
+  margin-bottom: 10px;
+}
+
+.candidate-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
 }
 
 .user-management {

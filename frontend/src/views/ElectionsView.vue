@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
   api: { type: Function, required: true },
@@ -15,6 +15,8 @@ const search = ref('');
 const statusFilter = ref('all');
 const sortOrder = ref('status');
 const favoritesKey = 'votacion:favorite-elections';
+const now = ref(Date.now());
+let timer = null;
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
 const statusFilters = [
   { value: 'all', label: 'Todas' },
@@ -64,6 +66,21 @@ function formatSchedule(value) {
   return value ? new Date(value).toLocaleString() : 'No definida';
 }
 
+function countdown(target, prefix) {
+  if (!target) return '';
+  const remaining = new Date(target).getTime() - now.value;
+  if (remaining <= 0) return prefix === 'Cierra' ? 'Cerrada' : 'Iniciada';
+  const totalMinutes = Math.ceil(remaining / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours || days) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return `${prefix} en ${parts.join(' ')}`;
+}
+
 function loadFavorites() {
   try {
     const saved = localStorage.getItem(favoritesKey);
@@ -105,7 +122,9 @@ async function load() {
 onMounted(() => {
   loadFavorites();
   load();
+  timer = window.setInterval(() => { now.value = Date.now(); }, 60000);
 });
+onBeforeUnmount(() => window.clearInterval(timer));
 watch(() => props.refreshKey, load);
 </script>
 
@@ -178,6 +197,8 @@ watch(() => props.refreshKey, load);
     </div>
     <p class="muted">{{ election.description }}</p>
     <p class="muted"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }} · <b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
+    <p v-if="election.status === 'draft'" class="countdown" role="status">{{ countdown(election.starts_at, 'Inicia') }}</p>
+    <p v-else-if="election.status === 'open'" class="countdown" role="status">{{ countdown(election.ends_at, 'Cierra') }}</p>
     <div class="row between">
       <span class="muted">{{ election.total_votes }} votos</span>
       <div class="row">
@@ -287,6 +308,11 @@ watch(() => props.refreshKey, load);
 
 .filter-count {
   margin: 12px 0 0;
+}
+
+.countdown {
+  color: var(--brand);
+  font-weight: 700;
 }
 
 .empty-elections {

@@ -54,6 +54,48 @@ const ElectionController = {
     } catch (err) { fail(res, err); }
   },
 
+  async update(req, res) {
+    try {
+      const current = await ElectionModel.findById(req.params.id);
+      if (!current) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
+      if (current.status !== 'draft') {
+        return res.status(400).json({ success: false, message: 'Solo se pueden editar elecciones en borrador' });
+      }
+      if (!req.body.title?.trim()) {
+        return res.status(400).json({ success: false, message: 'title es requerido' });
+      }
+      const { starts, ends } = parseSchedule(req.body.starts_at, req.body.ends_at);
+      if (starts <= new Date()) {
+        return res.status(400).json({ success: false, message: 'La fecha de inicio debe ser futura' });
+      }
+      const election = await ElectionModel.update(req.params.id, {
+        title: req.body.title.trim(), description: req.body.description,
+        starts_at: starts.toISOString(), ends_at: ends.toISOString(),
+      });
+      if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden editar elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: election });
+    } catch (err) { fail(res, err); }
+  },
+
+  async remove(req, res) {
+    try {
+      const election = await ElectionModel.remove(req.params.id);
+      if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden eliminar elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: election, message: 'Elección eliminada' });
+    } catch (err) { fail(res, err); }
+  },
+
+  async duplicate(req, res) {
+    try {
+      const election = await ElectionModel.duplicate(req.params.id, req.user.id);
+      if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden duplicar elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.status(201).json({ success: true, data: election });
+    } catch (err) { fail(res, err); }
+  },
+
   async addCandidate(req, res) {
     try {
       if (!req.body.name) return res.status(400).json({ success: false, message: 'name es requerido' });
@@ -65,6 +107,27 @@ const ElectionController = {
       const c = await ElectionModel.addCandidate(election.id, req.body);
       socket.emitResults(election.id, await ElectionModel.results(election.id));
       res.status(201).json({ success: true, data: c });
+    } catch (err) { fail(res, err); }
+  },
+
+  async updateCandidate(req, res) {
+    try {
+      if (!req.body.name?.trim()) return res.status(400).json({ success: false, message: 'name es requerido' });
+      const candidate = await ElectionModel.updateCandidate(req.params.candidateId, req.params.id, {
+        name: req.body.name.trim(), description: req.body.description,
+      });
+      if (!candidate) return res.status(400).json({ success: false, message: 'Solo se editan candidatos de elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: candidate });
+    } catch (err) { fail(res, err); }
+  },
+
+  async removeCandidate(req, res) {
+    try {
+      const candidate = await ElectionModel.removeCandidate(req.params.candidateId, req.params.id);
+      if (!candidate) return res.status(400).json({ success: false, message: 'Solo se eliminan candidatos de elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: candidate });
     } catch (err) { fail(res, err); }
   },
 

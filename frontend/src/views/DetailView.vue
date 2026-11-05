@@ -23,8 +23,20 @@ const chainVisible = ref(false);
 const error = ref('');
 const busy = ref(false);
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
+const now = ref(Date.now());
+let timer = null;
 function formatSchedule(value) {
   return value ? new Date(value).toLocaleString() : 'No definida';
+}
+function countdown(target, prefix) {
+  if (!target) return '';
+  const remaining = new Date(target).getTime() - now.value;
+  if (remaining <= 0) return prefix === 'Cierre' ? 'Periodo finalizado' : 'Disponible';
+  const minutes = Math.ceil(remaining / 60000);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  return `${prefix} en ${days ? `${days}d ` : ''}${days || hours ? `${hours}h ` : ''}${mins}m`;
 }
 const savedReceiptKey = computed(() => props.session
   ? `receipt:${props.session.user.id}:${props.view.id}`
@@ -108,8 +120,14 @@ async function copyReceipt() {
   }
 }
 
-onMounted(load);
-onBeforeUnmount(() => props.joinRoom(null));
+onMounted(() => {
+ load();
+ timer = window.setInterval(() => { now.value = Date.now(); }, 60000);
+});
+onBeforeUnmount(() => {
+ props.joinRoom(null);
+ window.clearInterval(timer);
+});
 watch(() => props.refreshKey, load);
 watch(() => props.liveResults, (data) => {
   if (data && Number(data.electionId) === Number(election.value?.id)) updateResults(data);
@@ -127,6 +145,8 @@ watch(() => props.liveResults, (data) => {
       </div>
       <p class="muted">{{ election.description }}</p>
       <p class="muted schedule-label"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }}<br><b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
+      <p v-if="election.status === 'draft'" class="countdown" role="status">{{ countdown(election.starts_at, 'Inicio') }}</p>
+      <p v-else-if="election.status === 'open'" class="countdown" role="status">{{ countdown(election.ends_at, 'Cierre') }}</p>
     </div>
 
     <div class="card">
