@@ -1,6 +1,7 @@
 const ElectionModel = require('../models/election.model');
 const VoteModel = require('../models/vote.model');
 const socket = require('../socket');
+const NotificationModel = require('../models/notification.model');
 
 const fail = (res, err) =>
   res.status(err.status || 500).json({ success: false, message: err.message });
@@ -166,6 +167,13 @@ const ElectionController = {
       }
       const e = await ElectionModel.setStatus(req.params.id, status);
       if (!e) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
+      if (status === 'open') {
+        await NotificationModel.createForAll('election-opened', 'Elección abierta', `Ya puedes participar en: ${e.title}`, e.id);
+        await NotificationModel.createForAdmins('election-published', 'Elección publicada', `La elección «${e.title}» fue publicada.`, e.id, req.user.id);
+      } else if (status === 'closed') {
+        await NotificationModel.createForAll('election-closed', 'Elección cerrada', `Finalizó la votación: ${e.title}`, e.id);
+      }
+      socket.emitNotificationsChanged();
       socket.emitElectionsChanged();
       res.json({ success: true, data: e });
     } catch (err) { fail(res, err); }

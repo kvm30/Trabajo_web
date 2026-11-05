@@ -31,6 +31,7 @@ app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/users', require('./routes/user.routes'));
 app.use('/api/elections', require('./routes/election.routes'));
 app.use('/api/audit', require('./routes/audit.routes'));
+app.use('/api/notifications', require('./routes/notification.routes'));
 
 app.get('*', (req, res, next) => {
   if (req.path === '/api' || req.path.startsWith('/api/')) return next();
@@ -40,10 +41,26 @@ app.get('*', (req, res, next) => {
 socket.init(server);
 
 const ElectionModel = require('./models/election.model');
+const NotificationModel = require('./models/notification.model');
 
 async function reconcileElectionSchedule() {
   try {
     const changed = await ElectionModel.reconcileSchedule();
+    for (const election of changed) {
+      const details = await ElectionModel.findById(election.id);
+      if (election.status === 'open' && details) {
+        await NotificationModel.createForAll('election-opened', 'Elección abierta', `Ya puedes participar en: ${details.title}`, details.id);
+      } else if (election.status === 'closed' && details) {
+        await NotificationModel.createForAll('election-closed', 'Elección cerrada', `Finalizó la votación: ${details.title}`, details.id);
+      }
+    }
+
+    const dueReminders = await NotificationModel.findDueReminders();
+    for (const election of dueReminders) {
+      await NotificationModel.createForAll('closing-soon', 'La votación cierra pronto', `Queda menos de una hora para votar en: ${election.title}`, election.id);
+    }
+
+    if (changed.length || dueReminders.length) socket.emitNotificationsChanged();
     if (changed.length) socket.emitElectionsChanged();
   } catch (err) {
     console.error('Error al sincronizar calendarios de votación:', err.message);

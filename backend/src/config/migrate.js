@@ -67,6 +67,23 @@ const schema = [
     columns: [],
   },
   {
+    table: 'notifications',
+    create: `
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        audience VARCHAR(20),
+        type VARCHAR(40) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        message TEXT NOT NULL,
+        election_id INTEGER REFERENCES elections(id) ON DELETE CASCADE,
+        read_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `,
+    columns: [],
+  },
+  {
     // Registra QUIÉN votó, pero NO por quién (anonimato).
     // Sin timestamp a propósito, para que no se pueda correlacionar con votes.created_at.
     table: 'voter_participation',
@@ -133,6 +150,9 @@ async function runMigrations() {
     console.log(`Tabla lista: ${entry.table}`);
   }
   await pool.query('CREATE INDEX IF NOT EXISTS idx_votes_election ON votes(election_id, id)');
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_user_type_election
+    ON notifications(user_id, type, election_id) WHERE user_id IS NOT NULL`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at)');
   await seedAdmin();
 }
 

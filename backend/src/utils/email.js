@@ -21,4 +21,19 @@ async function sendPasswordResetEmail(email, resetUrl) {
   });
 }
 
-module.exports = { sendPasswordResetEmail };
+async function sendElectionNotificationEmail(email, subject, message) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM } = process.env;
+  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASSWORD || !SMTP_FROM) return false;
+
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: Number(SMTP_PORT),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+  });
+
+  await transporter.sendMail({ from: SMTP_FROM, to: email, subject, text: message });
+  return true;
+}
+
+module.exports = { sendPasswordResetEmail, sendElectionNotificationEmail };
