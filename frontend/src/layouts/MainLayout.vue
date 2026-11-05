@@ -6,12 +6,22 @@ defineProps({
   go: { type: Function, required: true },
   logout: { type: Function, required: true },
   toastMessage: { type: String, default: '' },
+  notifications: { type: Array, default: () => [] },
+  unreadNotifications: { type: Number, default: 0 },
+  readNotifications: { type: Function, default: null },
 });
 </script>
 
 <template>
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
-  <AppNavigation :session="session" :go="go" :logout="logout" />
+  <AppNavigation
+    :session="session"
+    :go="go"
+    :logout="logout"
+    :notifications="notifications"
+    :unread-notifications="unreadNotifications"
+    :read-notifications="readNotifications"
+  />
   <main id="main-content">
     <slot />
   </main>

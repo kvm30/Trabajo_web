@@ -33,6 +33,7 @@ app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/users', require('./routes/user.routes'));
 app.use('/api/elections', require('./routes/election.routes'));
 app.use('/api/audit', require('./routes/audit.routes'));
+app.use('/api/notifications', require('./routes/notification.routes'));
 
 app.get('*', (req, res, next) => {
   if (req.path === '/api' || req.path.startsWith('/api/')) return next();
@@ -41,31 +42,47 @@ app.get('*', (req, res, next) => {
 
 socket.init(server);
 
+async function reconcileElectionSchedule() {
+  try {
+    const changed = await ElectionModel.reconcileSchedule();
+    for (const election of changed) {
+      const details = await ElectionModel.findById(election.id);
+      if (election.status === 'open' && details) {
+        await NotificationModel.createForAll('election-opened', 'Elección abierta', `Ya puedes participar en: ${details.title}`, details.id);
+        try {
+          await NotificationModel.enqueue(details.id, 'opened');
+        } catch (err) {
+          console.error(`No se pudo registrar la notificación para la elección ${details.id}:`, err.message);
+        }
+      } else if (election.status === 'closed' && details) {
+        await NotificationModel.createForAll('election-closed', 'Elección cerrada', `Finalizó la votación: ${details.title}`, details.id);
+        try {
+          await NotificationModel.enqueue(details.id, 'results');
+        } catch (err) {
+          console.error(`No se pudo registrar la notificación para la elección ${details.id}:`, err.message);
+        }
+      }
+    }
+
+    const dueReminders = await NotificationModel.findDueReminders();
+    for (const election of dueReminders) {
+      await NotificationModel.createForAll('closing-soon', 'La votación cierra pronto', `Queda menos de una hora para votar en: ${election.title}`, election.id);
+    }
+    await NotificationModel.enqueueUpcomingClosures();
+    await NotificationModel.processPending();
+
+    if (changed.length || dueReminders.length) socket.emitNotificationsChanged();
+    if (changed.length) socket.emitElectionsChanged();
+  } catch (err) {
+    console.error('Error al sincronizar calendarios de votación:', err.message);
+  }
+}
+
 async function start() {
   try {
     await runMigrations();
-    const runScheduledTasks = async () => {
-      const changedIds = await ElectionModel.refreshScheduledStatuses();
-      for (const electionId of changedIds) {
-        const election = await ElectionModel.findById(electionId);
-        if (!election) continue;
-        const eventType = election.status === 'open' ? 'opened' : 'results';
-        try {
-          await NotificationModel.enqueue(electionId, eventType);
-        } catch (err) {
-          console.error(`No se pudo registrar la notificación para la elección ${electionId}:`, err.message);
-        }
-      }
-      if (changedIds.length) socket.emitElectionsChanged();
-      await NotificationModel.enqueueUpcomingClosures();
-      await NotificationModel.processPending();
-    };
-    await runScheduledTasks();
-    setInterval(() => {
-      runScheduledTasks().catch((err) => {
-        console.error('Error al procesar elecciones y notificaciones programadas:', err.message);
-      });
-    }, 30_000);
+    await reconcileElectionSchedule();
+    setInterval(reconcileElectionSchedule, 30_000).unref();
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`App + API escuchando en el puerto ${PORT}`);
       console.log(`Swagger disponible en /api-docs`);

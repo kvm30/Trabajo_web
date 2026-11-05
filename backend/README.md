@@ -30,9 +30,13 @@ frontend/
 
 Configura `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` y `SMTP_FROM` en `backend/.env` para habilitar el envío de enlaces de recuperación. Usa `SMTP_SECURE=true` con proveedores que requieren TLS directo (normalmente puerto 465); para el puerto 587, usa `SMTP_SECURE=false`. Define `APP_URL` con la URL pública del frontend (en local, `http://localhost:5173`). Los enlaces vencen en una hora y solo pueden utilizarse una vez.
 
-## Avisos de elecciones y participación anónima
+## Elecciones, participación y notificaciones
 
-La misma configuración SMTP habilita correos al abrir una elección (a votantes que aún no participaron), una hora antes del cierre (a participantes) y al publicar resultados (a participantes). Los correos se envían con destinatarios en copia oculta y los eventos pendientes se reintentan si hay errores. El endpoint `GET /api/elections/participation` requiere una sesión con rol `voter`; responde solo conteos agregados y no incluye identidades ni resultados por candidato. El panel se encuentra en **Participación**.
+El sistema mantiene separadas la participación (`voter_participation`) y la selección del voto (`votes`), sin asociar una cuenta con un candidato. El endpoint `GET /api/elections/participation` requiere una sesión con rol `voter` y solo devuelve conteos agregados.
+
+El panel de administración permite programar y editar elecciones, administrar cuentas, y exportar resultados como CSV o imprimirlos/guardarlos como PDF. Las elecciones programadas se abren y cierran automáticamente.
+
+Las notificaciones dentro del sitio informan sobre cambios de elecciones. Si configuras SMTP, también se envían avisos de apertura a quienes aún no han votado, recordatorios una hora antes del cierre y resultados al cerrar la elección. Los destinatarios del correo se ponen en copia oculta y los avisos pendientes se reintentan si falla el envío.
 
 Para iniciar solamente un servicio usa `npm run dev:backend` o `npm run dev:frontend`. Vite usa el backend en `http://localhost:3000` como proxy para la API y Socket.IO.
 
@@ -45,7 +49,7 @@ npm start
 
 ## Publicación en Internet
 
-La configuración del servicio web gratuito de Render está en [`../render.yaml`](../render.yaml). Sigue los pasos de publicación del [README principal](../README.md): crea una base PostgreSQL en Neon y configura `DATABASE_URL` y `ADMIN_PASSWORD` al crear el Blueprint. El pool admite `DATABASE_URL` con SSL verificado y conserva la configuración `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` para desarrollo local. Los planes gratuitos pueden suspender el servicio o tener límites; no se recomiendan para elecciones reales.
+La configuración de despliegue para Render está en [`../render.yaml`](../render.yaml). Sigue los pasos de publicación del [README principal](../README.md). Render proporciona el puerto y las variables de PostgreSQL; debes establecer `ADMIN_PASSWORD` al crear el Blueprint. La base de datos configurada es un recurso de pago para conservar los datos.
 
 ## Cómo funciona la auditoría
 - `voter_participation` guarda QUIÉN votó (evita doble voto) pero no por quién.

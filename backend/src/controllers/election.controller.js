@@ -6,16 +6,16 @@ const socket = require('../socket');
 const fail = (res, err) =>
   res.status(err.status || 500).json({ success: false, message: err.message });
 
-function validateSchedule(startsAt, endsAt) {
-  if (typeof startsAt !== 'string' || typeof endsAt !== 'string' || !startsAt || !endsAt) {
-    return 'La fecha de inicio y la fecha de cierre son obligatorias';
+function parseSchedule(startsAt, endsAt) {
+  const starts = startsAt ? new Date(startsAt) : null;
+  const ends = endsAt ? new Date(endsAt) : null;
+  if (!starts || !ends || Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) {
+    throw Object.assign(new Error('La fecha de inicio y cierre son requeridas y deben ser válidas'), { status: 400 });
   }
-  const start = Date.parse(startsAt);
-  const end = Date.parse(endsAt);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return 'Las fechas no son válidas';
-  if (end <= start) return 'La fecha de cierre debe ser posterior a la fecha de inicio';
-  if (start <= Date.now()) return 'La fecha de inicio debe ser futura';
-  return null;
+  if (starts >= ends) {
+    throw Object.assign(new Error('La fecha de cierre debe ser posterior a la fecha de inicio'), { status: 400 });
+  }
+  return { starts, ends };
 }
 
 const ElectionController = {
@@ -28,12 +28,16 @@ const ElectionController = {
   },
 
   async getAll(req, res) {
-    try { res.json({ success: true, data: await ElectionModel.findAll() }); }
+    try {
+      await ElectionModel.reconcileSchedule();
+      res.json({ success: true, data: await ElectionModel.findAll() });
+    }
     catch (err) { fail(res, err); }
   },
 
   async getById(req, res) {
     try {
+      await ElectionModel.reconcileSchedule();
       const election = await ElectionModel.findById(req.params.id);
       if (!election) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
       const results = await ElectionModel.results(election.id);
@@ -43,13 +47,17 @@ const ElectionController = {
 
   async create(req, res) {
     try {
-      if (!req.body.title) return res.status(400).json({ success: false, message: 'title es requerido' });
-      const { starts_at: startsAt, ends_at: endsAt } = req.body;
-      if (startsAt != null || endsAt != null) {
-        const scheduleError = validateSchedule(startsAt, endsAt);
-        if (scheduleError) return res.status(400).json({ success: false, message: scheduleError });
+      if (!req.body.title?.trim()) return res.status(400).json({ success: false, message: 'title es requerido' });
+      const { starts, ends } = parseSchedule(req.body.starts_at, req.body.ends_at);
+      if (starts <= new Date()) {
+        return res.status(400).json({ success: false, message: 'La fecha de inicio debe ser futura' });
       }
-      const e = await ElectionModel.create(req.body, req.user.id);
+      const e = await ElectionModel.create({
+        ...req.body,
+        title: req.body.title.trim(),
+        starts_at: starts.toISOString(),
+        ends_at: ends.toISOString(),
+      }, req.user.id);
       socket.emitElectionsChanged();
       res.status(201).json({ success: true, data: e });
     } catch (err) { fail(res, err); }
@@ -58,8 +66,10 @@ const ElectionController = {
   async setSchedule(req, res) {
     try {
       const { starts_at: startsAt, ends_at: endsAt } = req.body;
-      const scheduleError = validateSchedule(startsAt, endsAt);
-      if (scheduleError) return res.status(400).json({ success: false, message: scheduleError });
+      const { starts, ends } = parseSchedule(startsAt, endsAt);
+      if (starts <= new Date()) {
+        return res.status(400).json({ success: false, message: 'La fecha de inicio debe ser futura' });
+      }
 
       const election = await ElectionModel.findById(req.params.id);
       if (!election) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
@@ -67,12 +77,54 @@ const ElectionController = {
         return res.status(400).json({ success: false, message: 'Solo se programa una elección en borrador' });
       }
 
-      const updated = await ElectionModel.setSchedule(req.params.id, startsAt, endsAt);
+      const updated = await ElectionModel.setSchedule(req.params.id, starts.toISOString(), ends.toISOString());
       if (!updated) {
         return res.status(400).json({ success: false, message: 'No se puede programar una elección que ya tiene votos' });
       }
       socket.emitElectionsChanged();
       res.json({ success: true, data: updated });
+    } catch (err) { fail(res, err); }
+  },
+
+  async update(req, res) {
+    try {
+      const current = await ElectionModel.findById(req.params.id);
+      if (!current) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
+      if (current.status !== 'draft') {
+        return res.status(400).json({ success: false, message: 'Solo se pueden editar elecciones en borrador' });
+      }
+      if (!req.body.title?.trim()) {
+        return res.status(400).json({ success: false, message: 'title es requerido' });
+      }
+      const { starts, ends } = parseSchedule(req.body.starts_at, req.body.ends_at);
+      if (starts <= new Date()) {
+        return res.status(400).json({ success: false, message: 'La fecha de inicio debe ser futura' });
+      }
+      const election = await ElectionModel.update(req.params.id, {
+        title: req.body.title.trim(), description: req.body.description,
+        starts_at: starts.toISOString(), ends_at: ends.toISOString(),
+      });
+      if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden editar elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: election });
+    } catch (err) { fail(res, err); }
+  },
+
+  async remove(req, res) {
+    try {
+      const election = await ElectionModel.remove(req.params.id);
+      if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden eliminar elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: election, message: 'Elección eliminada' });
+    } catch (err) { fail(res, err); }
+  },
+
+  async duplicate(req, res) {
+    try {
+      const election = await ElectionModel.duplicate(req.params.id, req.user.id);
+      if (!election) return res.status(400).json({ success: false, message: 'Solo se pueden duplicar elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.status(201).json({ success: true, data: election });
     } catch (err) { fail(res, err); }
   },
 
@@ -90,6 +142,27 @@ const ElectionController = {
     } catch (err) { fail(res, err); }
   },
 
+  async updateCandidate(req, res) {
+    try {
+      if (!req.body.name?.trim()) return res.status(400).json({ success: false, message: 'name es requerido' });
+      const candidate = await ElectionModel.updateCandidate(req.params.candidateId, req.params.id, {
+        name: req.body.name.trim(), description: req.body.description,
+      });
+      if (!candidate) return res.status(400).json({ success: false, message: 'Solo se editan candidatos de elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: candidate });
+    } catch (err) { fail(res, err); }
+  },
+
+  async removeCandidate(req, res) {
+    try {
+      const candidate = await ElectionModel.removeCandidate(req.params.candidateId, req.params.id);
+      if (!candidate) return res.status(400).json({ success: false, message: 'Solo se eliminan candidatos de elecciones en borrador' });
+      socket.emitElectionsChanged();
+      res.json({ success: true, data: candidate });
+    } catch (err) { fail(res, err); }
+  },
+
   async setStatus(req, res) {
     try {
       const { status } = req.body;
@@ -100,11 +173,28 @@ const ElectionController = {
       if (!currentElection) {
         return res.status(404).json({ success: false, message: 'Elección no encontrada' });
       }
-      if (status === 'open' && !(await ElectionModel.countCandidates(currentElection.id))) {
-        return res.status(400).json({
-          success: false,
-          message: 'Agrega al menos un candidato antes de abrir la elección',
-        });
+      if (status === 'open') {
+        if (!(await ElectionModel.countCandidates(currentElection.id))) {
+          return res.status(400).json({
+            success: false,
+            message: 'Agrega al menos un candidato antes de abrir la elección',
+          });
+        }
+        if (!currentElection.starts_at || !currentElection.ends_at) {
+          return res.status(400).json({ success: false, message: 'La elección debe tener fechas de inicio y cierre' });
+        }
+        const starts = new Date(currentElection.starts_at);
+        const ends = new Date(currentElection.ends_at);
+        const now = new Date();
+        if (now < starts) {
+          return res.status(400).json({ success: false, message: 'La elección aún no puede abrirse porque la fecha de inicio no ha llegado' });
+        }
+        if (now >= ends) {
+          return res.status(400).json({ success: false, message: 'La elección no puede abrirse porque su fecha de cierre ya pasó' });
+        }
+      }
+      if (status === 'draft' && currentElection.status === 'closed') {
+        return res.status(400).json({ success: false, message: 'Una elección cerrada no puede volver a borrador' });
       }
       const e = await ElectionModel.setStatus(req.params.id, status);
       if (!e) return res.status(404).json({ success: false, message: 'Elección no encontrada' });
@@ -115,6 +205,13 @@ const ElectionController = {
           console.error(`No se pudo registrar la notificación para la elección ${req.params.id}:`, err.message);
         }
       }
+      if (status === 'open') {
+        await NotificationModel.createForAll('election-opened', 'Elección abierta', `Ya puedes participar en: ${e.title}`, e.id);
+        await NotificationModel.createForAdmins('election-published', 'Elección publicada', `La elección «${e.title}» fue publicada.`, e.id, req.user.id);
+      } else if (status === 'closed') {
+        await NotificationModel.createForAll('election-closed', 'Elección cerrada', `Finalizó la votación: ${e.title}`, e.id);
+      }
+      socket.emitNotificationsChanged();
       socket.emitElectionsChanged();
       res.json({ success: true, data: e });
     } catch (err) { fail(res, err); }

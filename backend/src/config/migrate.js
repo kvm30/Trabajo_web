@@ -13,6 +13,7 @@ const schema = [
         email VARCHAR(150) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         role VARCHAR(20) NOT NULL DEFAULT 'voter',
+        active BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `,
@@ -21,6 +22,7 @@ const schema = [
       { name: 'email',      def: 'VARCHAR(150)' },
       { name: 'password',   def: 'VARCHAR(255) NOT NULL' },
       { name: 'role',       def: "VARCHAR(20) NOT NULL DEFAULT 'voter'" },
+      { name: 'active',     def: 'BOOLEAN NOT NULL DEFAULT TRUE' },
       { name: 'created_at', def: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' },
     ],
   },
@@ -81,6 +83,23 @@ const schema = [
         election_id INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
         name VARCHAR(150) NOT NULL,
         description TEXT
+      )
+    `,
+    columns: [],
+  },
+  {
+    table: 'notifications',
+    create: `
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        audience VARCHAR(20),
+        type VARCHAR(40) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        message TEXT NOT NULL,
+        election_id INTEGER REFERENCES elections(id) ON DELETE CASCADE,
+        read_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `,
     columns: [],
@@ -152,6 +171,9 @@ async function runMigrations() {
     console.log(`Tabla lista: ${entry.table}`);
   }
   await pool.query('CREATE INDEX IF NOT EXISTS idx_votes_election ON votes(election_id, id)');
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_user_type_election
+    ON notifications(user_id, type, election_id) WHERE user_id IS NOT NULL`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at)');
   await seedAdmin();
 }
 

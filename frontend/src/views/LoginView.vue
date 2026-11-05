@@ -23,6 +23,16 @@ const resetToken = props.view.resetToken;
 
 async function submit() {
   error.value = '';
+  if (register) {
+    if (name.value.trim().length < 2) {
+      error.value = 'El nombre debe tener al menos 2 caracteres';
+      return;
+    }
+    if (!/(?=.*[A-Za-z])(?=.*\d).{8,}/.test(password.value)) {
+      error.value = 'La contraseña debe tener al menos 8 caracteres, una letra y un número';
+      return;
+    }
+  }
   busy.value = true;
   try {
     const body = {
@@ -61,6 +71,10 @@ async function resetPassword() {
     error.value = 'Las contraseñas no coinciden';
     return;
   }
+  if (!/(?=.*[A-Za-z])(?=.*\d).{8,}/.test(newPassword.value)) {
+    error.value = 'La contraseña debe tener al menos 8 caracteres, una letra y un número';
+    return;
+  }
 
   busy.value = true;
   try {
@@ -95,7 +109,7 @@ async function resetPassword() {
   <form v-else-if="resetToken && !resetComplete" class="card login-card" @submit.prevent="resetPassword">
     <h2>Cambiar contraseña</h2>
     <label for="new-password">Nueva contraseña</label>
-    <input id="new-password" v-model="newPassword" type="password" autocomplete="new-password" minlength="8" required>
+    <input id="new-password" v-model="newPassword" type="password" autocomplete="new-password" minlength="8" pattern="(?=.*[A-Za-z])(?=.*\d).{8,}" title="Mínimo 8 caracteres, incluyendo una letra y un número" required>
     <label for="confirm-password">Confirmar contraseña</label>
     <input id="confirm-password" v-model="confirmPassword" type="password" autocomplete="new-password" minlength="8" required>
     <div class="row between">
@@ -114,15 +128,17 @@ async function resetPassword() {
   <form v-else class="card login-card" @submit.prevent="submit">
     <h2>{{ register ? 'Crear cuenta' : 'Ingresar' }}</h2>
     <label v-if="register" for="name">Nombre</label>
-    <input v-if="register" id="name" v-model="name" autocomplete="name" required>
+    <input v-if="register" id="name" v-model="name" autocomplete="name" minlength="2" maxlength="100" required>
     <label for="email">Email</label>
-    <input id="email" v-model="email" type="email" autocomplete="email" required>
+    <input id="email" v-model="email" type="email" autocomplete="email" maxlength="150" required>
     <label for="password">Contraseña</label>
     <input
       id="password"
       v-model="password"
       type="password"
       :autocomplete="register ? 'new-password' : 'current-password'"
+      :pattern="register ? '(?=.*[A-Za-z])(?=.*\\d).{8,}' : undefined"
+      :title="register ? 'Mínimo 8 caracteres, incluyendo una letra y un número' : undefined"
       required
     >
     <div class="row between">

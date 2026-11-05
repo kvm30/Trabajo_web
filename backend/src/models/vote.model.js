@@ -22,10 +22,17 @@ const VoteModel = {
                   WHEN starts_at IS NOT NULL THEN 'draft'
                   ELSE status
                 END AS effective_status
-         FROM elections WHERE id = $1`,
+         FROM elections WHERE id = $1 FOR UPDATE`,
         [electionId]
       )).rows[0];
       if (!el) throw new HttpError(404, 'Elección no encontrada');
+      if (!el.starts_at || !el.ends_at) {
+        throw new HttpError(400, 'La elección no tiene configuradas sus fechas de votación');
+      }
+      const now = new Date();
+      if (now < new Date(el.starts_at) || now >= new Date(el.ends_at)) {
+        throw new HttpError(400, 'La votación está fuera de su horario permitido');
+      }
       if (el.effective_status !== 'open') throw new HttpError(400, 'La elección no está abierta');
 
       const cand = await client.query(

@@ -13,5 +13,9 @@ function init(httpServer) {
 const emitResults = (electionId, results) =>
   io?.to(`election:${electionId}`).emit('results:update', { electionId, ...results });
 const emitElectionsChanged = () => io?.emit('elections:changed');
+const emitNotificationsChanged = (userId = null) => {
+  if (userId) io?.to(`user:${userId}`).emit('notifications:changed');
+  else io?.emit('notifications:changed');
+};
 
-module.exports = { init, emitResults, emitElectionsChanged };
+module.exports = { init, emitResults, emitElectionsChanged, emitNotificationsChanged };

@@ -165,7 +165,8 @@ button:focus-visible,
 .btn:focus-visible,
 a:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--brand) 42%, transparent);
   outline-offset: 3px;
 }
@@ -184,7 +185,8 @@ a {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   margin: 5px 0 16px;
   padding: 11px 13px;
@@ -197,7 +199,8 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent);
   outline: 0;
@@ -356,6 +359,15 @@ label {
   border-color: color-mix(in srgb, var(--bad) 30%, transparent);
   background: color-mix(in srgb, var(--bad-soft) 74%, var(--card));
   color: var(--bad);
+}
+
+.countdown {
+  color: var(--brand);
+  font-weight: 750;
+}
+
+select {
+  cursor: pointer;
 }
 
 #toast {

@@ -12,6 +12,8 @@ const session = ref(savedSession ? JSON.parse(savedSession) : null);
 const refreshKey = ref(0);
 const liveResults = ref(null);
 const toastMessage = ref('');
+const notifications = ref([]);
+const unreadNotifications = ref(0);
 const view = computed(() => ({
   name: route.name,
   id: route.params.id,
@@ -45,6 +47,9 @@ const pageProps = computed(() => {
   if (route.name === 'verify') return { api, view: view.value };
   if (route.name === 'admin') {
     return { api, session: session.value, go, toast, refreshKey: refreshKey.value };
+  }
+  if (route.name === 'profile') {
+    return { api, session: session.value, setSession, go, toast };
   }
   if (route.name === 'participation') {
     return { api, session: session.value, go, refreshKey: refreshKey.value };
@@ -91,6 +96,30 @@ function joinRoom(id) {
   if (id) socket.emit('join', id);
 }
 
+async function loadNotifications() {
+  if (!session.value) {
+    notifications.value = [];
+    unreadNotifications.value = 0;
+    return;
+  }
+  try {
+    const data = await api('/notifications');
+    notifications.value = data.items;
+    unreadNotifications.value = data.unread;
+  } catch (err) {
+    console.error('No se pudieron cargar las notificaciones:', err.message);
+  }
+}
+
+async function readNotifications() {
+  if (!session.value) return;
+  try {
+    await api('/notifications/read-all', 'PATCH');
+    unreadNotifications.value = 0;
+  } catch (err) {
+    console.error('No se pudieron marcar las notificaciones:', err.message);
+  }
+}
 function handleResultsUpdate(data) {
   if (route.name === 'detail' && Number(route.params.id) === Number(data.electionId)) {
     liveResults.value = data;
@@ -105,15 +134,22 @@ function handleConnect() {
   if (currentRoom) socket.emit('join', currentRoom);
 }
 
+function handleNotificationsChanged() {
+  loadNotifications();
+}
+
 onMounted(() => {
   socket.on('results:update', handleResultsUpdate);
   socket.on('elections:changed', handleElectionsChanged);
+  socket.on('notifications:changed', handleNotificationsChanged);
   socket.on('connect', handleConnect);
+  loadNotifications();
 });
 
 onBeforeUnmount(() => {
   socket.off('results:update', handleResultsUpdate);
   socket.off('elections:changed', handleElectionsChanged);
+  socket.off('notifications:changed', handleNotificationsChanged);
   socket.off('connect', handleConnect);
   socket.disconnect();
   clearTimeout(toastTimer);
@@ -123,10 +159,19 @@ watch(() => route.fullPath, () => {
   liveResults.value = null;
   if (route.name !== 'detail') joinRoom(null);
 });
+watch(() => session.value?.user.id, loadNotifications);
 </script>
 
 <template>
-  <MainLayout :session="session" :go="go" :logout="logout" :toast-message="toastMessage">
+  <MainLayout
+    :session="session"
+    :go="go"
+    :logout="logout"
+    :toast-message="toastMessage"
+    :notifications="notifications"
+    :unread-notifications="unreadNotifications"
+    :read-notifications="readNotifications"
+  >
     <RouterView v-slot="{ Component }">
       <component
         :is="Component"

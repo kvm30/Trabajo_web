@@ -17,17 +17,18 @@ const ElectionModel = {
              (SELECT COUNT(*)::int FROM votes v WHERE v.election_id = e.id) AS total_votes,
              (SELECT COUNT(*)::int FROM candidates c WHERE c.election_id = e.id) AS total_candidates,
              (SELECT COUNT(*)::int FROM voter_participation vp WHERE vp.election_id = e.id) AS participation_count,
-             (SELECT COUNT(*)::int FROM users u WHERE u.role = 'voter') AS eligible_voters,
+             (SELECT COUNT(*)::int FROM users u WHERE u.role = 'voter' AND u.active = TRUE) AS eligible_voters,
              (SELECT COALESCE(
                json_agg(json_build_object(
                  'id', candidate_results.id,
                  'name', candidate_results.name,
+                 'description', candidate_results.description,
                  'votes', candidate_results.votes
                ) ORDER BY candidate_results.id),
                '[]'::json
              )
              FROM (
-               SELECT c.id, c.name, COUNT(v.id)::int AS votes
+               SELECT c.id, c.name, c.description, COUNT(v.id)::int AS votes
                FROM candidates c
                LEFT JOIN votes v ON v.candidate_id = c.id
                WHERE c.election_id = e.id
@@ -47,7 +48,7 @@ const ElectionModel = {
       SELECT e.id, e.title, e.status, e.starts_at, e.ends_at,
              (SELECT COUNT(*)::int FROM votes v WHERE v.election_id = e.id) AS total_votes,
              (SELECT COUNT(*)::int FROM voter_participation vp WHERE vp.election_id = e.id) AS participation_count,
-             (SELECT COUNT(*)::int FROM users u WHERE u.role = 'voter') AS eligible_voters
+             (SELECT COUNT(*)::int FROM users u WHERE u.role = 'voter' AND u.active = TRUE) AS eligible_voters
       FROM elections e
       ORDER BY e.id DESC`);
     const elections = rows.map((row) => ({
@@ -106,6 +107,79 @@ const ElectionModel = {
     return rows[0] || null;
   },
 
+  async update(id, { title, description, starts_at, ends_at }) {
+    const { rows } = await pool.query(
+      `UPDATE elections SET title = $1, description = $2, starts_at = $3, ends_at = $4
+       WHERE id = $5 AND status = 'draft' RETURNING *`,
+      [title, description || null, starts_at, ends_at, id]
+    );
+    return rows[0] || null;
+  },
+
+  async remove(id) {
+    const { rows } = await pool.query(
+      "DELETE FROM elections WHERE id = $1 AND status = 'draft' RETURNING id",
+      [id]
+    );
+    return rows[0] || null;
+  },
+
+  async duplicate(id, userId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const source = await client.query('SELECT title, description, starts_at, ends_at FROM elections WHERE id = $1 AND status = $2', [id, 'draft']);
+      if (!source.rows[0]) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      if (!source.rows[0].starts_at || !source.rows[0].ends_at) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const duration = new Date(source.rows[0].ends_at) - new Date(source.rows[0].starts_at);
+      const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const endsAt = new Date(startsAt.getTime() + duration);
+      const created = await client.query(
+        `INSERT INTO elections (title, description, starts_at, ends_at, created_by)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [`${source.rows[0].title} (copia)`, source.rows[0].description, startsAt, endsAt, userId]
+      );
+      await client.query(
+        `INSERT INTO candidates (election_id, name, description)
+         SELECT $1, name, description FROM candidates WHERE election_id = $2`,
+        [created.rows[0].id, id]
+      );
+      await client.query('COMMIT');
+      return created.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async updateCandidate(candidateId, electionId, { name, description }) {
+    const { rows } = await pool.query(
+      `UPDATE candidates c SET name = $1, description = $2
+       FROM elections e WHERE c.id = $3 AND c.election_id = $4 AND e.id = $4 AND e.status = 'draft'
+       RETURNING c.*`,
+      [name, description || null, candidateId, electionId]
+    );
+    return rows[0] || null;
+  },
+
+  async removeCandidate(candidateId, electionId) {
+    const { rows } = await pool.query(
+      `DELETE FROM candidates c USING elections e
+       WHERE c.id = $1 AND c.election_id = $2 AND e.id = $2 AND e.status = 'draft'
+       RETURNING c.*`,
+      [candidateId, electionId]
+    );
+    return rows[0] || null;
+  },
+
   async setStatus(id, status) {
     const { rows } = await pool.query(
       'UPDATE elections SET status = $1 WHERE id = $2 RETURNING *', [status, id]);
@@ -113,17 +187,34 @@ const ElectionModel = {
   },
 
   async refreshScheduledStatuses() {
-    const opened = await pool.query(
-      `UPDATE elections SET status = 'open'
-       WHERE status = 'draft' AND starts_at IS NOT NULL AND starts_at <= NOW()
-         AND (ends_at IS NULL OR ends_at > NOW())
-         AND EXISTS (SELECT 1 FROM candidates c WHERE c.election_id = elections.id)
-       RETURNING id`);
-    const closed = await pool.query(
-      `UPDATE elections SET status = 'closed'
-       WHERE status IN ('draft', 'open') AND ends_at IS NOT NULL AND ends_at <= NOW()
-       RETURNING id`);
-    return [...opened.rows, ...closed.rows].map((row) => row.id);
+    const changed = await this.reconcileSchedule();
+    return changed.map((election) => election.id);
+  },
+
+  async reconcileSchedule() {
+    const { rows } = await pool.query(`
+      UPDATE elections e
+      SET status = CASE
+        WHEN e.ends_at IS NOT NULL AND e.ends_at <= CURRENT_TIMESTAMP THEN 'closed'
+        WHEN e.status = 'draft'
+          AND e.starts_at IS NOT NULL
+          AND e.starts_at <= CURRENT_TIMESTAMP
+          AND (SELECT COUNT(*) FROM candidates c WHERE c.election_id = e.id) > 0
+        THEN 'open'
+        ELSE e.status
+      END
+      WHERE e.status IN ('draft', 'open')
+        AND (
+          (e.ends_at IS NOT NULL AND e.ends_at <= CURRENT_TIMESTAMP)
+          OR (
+            e.status = 'draft'
+            AND e.starts_at IS NOT NULL
+            AND e.starts_at <= CURRENT_TIMESTAMP
+            AND (SELECT COUNT(*) FROM candidates c WHERE c.election_id = e.id) > 0
+          )
+        )
+      RETURNING id, status`);
+    return rows;
   },
 
   async countCandidates(electionId) {

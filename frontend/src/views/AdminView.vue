@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
   api: { type: Function, required: true },
@@ -10,19 +10,32 @@ const props = defineProps({
 });
 
 const elections = ref([]);
+const users = ref([]);
+const userSearch = ref('');
+const userRoleFilter = ref('all');
+const userStatusFilter = ref('all');
+const managingUserId = ref(null);
 const title = ref('');
 const description = ref('');
 const startsAt = ref('');
 const endsAt = ref('');
 const candidateNames = ref({});
-const scheduleDrafts = reactive({});
-const printElection = ref(null);
 const error = ref('');
 const loading = ref(false);
 const creating = ref(false);
 const addingCandidateId = ref(null);
 const changingElectionId = ref(null);
+const editingElectionId = ref(null);
+const printElection = ref(null);
+const editTitle = ref('');
+const editDescription = ref('');
+const editStartsAt = ref('');
+const editEndsAt = ref('');
 const statusLabels = { draft: 'Borrador', open: 'Abierta', closed: 'Cerrada' };
+function formatSchedule(value) {
+  if (!value) return 'No definida';
+  return new Date(value).toLocaleString();
+}
 const summary = computed(() => ({
   total: elections.value.length,
   open: elections.value.filter((election) => election.status === 'open').length,
@@ -30,32 +43,75 @@ const summary = computed(() => ({
   votes: elections.value.reduce((total, election) => total + election.total_votes, 0),
 }));
 
-function toLocalDateTime(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return localDate.toISOString().slice(0, 16);
+function csvCell(value) {
+  let text = String(value ?? '');
+  if (typeof value === 'string' && /^[\u0000-\u0020]*[=+@-]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
-function toUtcIso(value) {
-  return value ? new Date(value).toISOString() : null;
+function safeFileName(value) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'eleccion';
 }
 
-function refreshScheduleDrafts() {
-  for (const election of elections.value) {
-    scheduleDrafts[election.id] = {
-      starts_at: toLocalDateTime(election.starts_at),
-      ends_at: toLocalDateTime(election.ends_at),
-    };
+function exportCsv(election) {
+  try {
+    const rows = [
+      ['Elección', election.title],
+      ['Estado', statusLabels[election.status]],
+      ['Votos totales', election.total_votes],
+      ['Participación', `${election.participation_count}/${election.eligible_voters} (${election.participation_rate}%)`],
+      [],
+      ['Candidato', 'Votos', 'Porcentaje'],
+      ...election.candidates.map((candidate) => [
+        candidate.name,
+        candidate.votes,
+        `${election.total_votes ? Math.round(candidate.votes / election.total_votes * 10000) / 100 : 0}%`,
+      ]),
+    ];
+    const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${safeFileName(election.title)}-resultados.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    props.toast(`No se pudo exportar el CSV: ${err.message}`);
   }
 }
+
+function exportPdf(election) {
+  printElection.value = { ...election, total: election.total_votes };
+  nextTick()
+    .then(() => window.print())
+    .catch((err) => props.toast(`No se pudo preparar el PDF: ${err.message}`));
+}
+const filteredUsers = computed(() => {
+  const search = userSearch.value.trim().toLowerCase();
+  return users.value.filter((user) => {
+    const matchesSearch = !search
+      || user.name?.toLowerCase().includes(search)
+      || user.email?.toLowerCase().includes(search);
+    const matchesRole = userRoleFilter.value === 'all' || user.role === userRoleFilter.value;
+    const matchesStatus = userStatusFilter.value === 'all'
+      || (userStatusFilter.value === 'active' ? user.active !== false : user.active === false);
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+});
 
 async function load() {
   error.value = '';
   loading.value = true;
   try {
-    elections.value = await props.api('/elections');
-    refreshScheduleDrafts();
+    const [electionData, userData] = await Promise.all([
+      props.api('/elections'),
+      props.api('/users'),
+    ]);
+    elections.value = electionData;
+    users.value = userData;
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -64,23 +120,13 @@ async function load() {
 }
 
 async function createElection() {
-  if (Boolean(startsAt.value) !== Boolean(endsAt.value)) {
-    props.toast('Completa ambas fechas o deja las dos vacías');
-    return;
-  }
-  if (startsAt.value && new Date(endsAt.value) <= new Date(startsAt.value)) {
-    props.toast('La fecha de cierre debe ser posterior al inicio');
-    return;
-  }
   creating.value = true;
   try {
     await props.api('/elections', 'POST', {
       title: title.value,
       description: description.value,
-      ...(startsAt.value && {
-        starts_at: toUtcIso(startsAt.value),
-        ends_at: toUtcIso(endsAt.value),
-      }),
+      starts_at: startsAt.value ? new Date(startsAt.value).toISOString() : null,
+      ends_at: endsAt.value ? new Date(endsAt.value).toISOString() : null,
     });
     props.toast('Elección creada');
     title.value = '';
@@ -92,28 +138,6 @@ async function createElection() {
     props.toast(err.message);
   } finally {
     creating.value = false;
-  }
-}
-
-async function scheduleElection(electionId) {
-  const schedule = scheduleDrafts[electionId];
-  if (!schedule?.starts_at || !schedule.ends_at) {
-    props.toast('Completa las fechas de inicio y cierre');
-    return;
-  }
-  if (new Date(schedule.ends_at) <= new Date(schedule.starts_at)) {
-    props.toast('La fecha de cierre debe ser posterior al inicio');
-    return;
-  }
-  try {
-    await props.api(`/elections/${electionId}/schedule`, 'PATCH', {
-      starts_at: toUtcIso(schedule.starts_at),
-      ends_at: toUtcIso(schedule.ends_at),
-    });
-    props.toast('Calendario actualizado');
-    await load();
-  } catch (err) {
-    props.toast(err.message);
   }
 }
 
@@ -163,51 +187,123 @@ async function changeStatus(electionId, status) {
   }
 }
 
-function csvCell(value) {
-  let text = String(value ?? '');
-  if (typeof value === 'string' && /^[\u0000-\u0020]*[=+@-]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
+function toDatetimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
 }
 
-function safeFileName(value) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'eleccion';
+function beginEdit(election) {
+  editingElectionId.value = election.id;
+  editTitle.value = election.title;
+  editDescription.value = election.description || '';
+  editStartsAt.value = toDatetimeLocal(election.starts_at);
+  editEndsAt.value = toDatetimeLocal(election.ends_at);
 }
 
-function exportCsv(election) {
+async function saveElection(electionId) {
   try {
-    const rows = [
-      ['Elección', election.title],
-      ['Estado', statusLabels[election.status]],
-      ['Votos totales', election.total_votes],
-      ['Participación', `${election.participation_count}/${election.eligible_voters} (${election.participation_rate}%)`],
-      [],
-      ['Candidato', 'Votos', 'Porcentaje'],
-      ...election.candidates.map((candidate) => [
-        candidate.name,
-        candidate.votes,
-        `${election.total_votes ? Math.round(candidate.votes / election.total_votes * 10000) / 100 : 0}%`,
-      ]),
-    ];
-    const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${safeFileName(election.title)}-resultados.csv`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    await props.api(`/elections/${electionId}`, 'PUT', {
+      title: editTitle.value,
+      description: editDescription.value,
+      starts_at: new Date(editStartsAt.value).toISOString(),
+      ends_at: new Date(editEndsAt.value).toISOString(),
+    });
+    editingElectionId.value = null;
+    props.toast('Elección actualizada');
+    await load();
   } catch (err) {
     props.toast(err.message);
   }
 }
 
-function exportPdf(election) {
-  printElection.value = { ...election, total: election.total_votes };
-  nextTick()
-    .then(() => window.print())
-    .catch((err) => props.toast(err.message));
+async function deleteElection(election) {
+  if (!window.confirm(`¿Eliminar permanentemente la elección "${election.title}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await props.api(`/elections/${election.id}`, 'DELETE');
+    props.toast('Elección eliminada');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function duplicateElection(election) {
+  try {
+    await props.api(`/elections/${election.id}/duplicate`, 'POST');
+    props.toast('Elección duplicada para mañana');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function editCandidate(electionId, candidate) {
+  const name = window.prompt('Nombre del candidato', candidate.name);
+  if (name === null || !name.trim()) return;
+  const description = window.prompt('Descripción del candidato', candidate.description || '') ?? candidate.description;
+  try {
+    await props.api(`/elections/${electionId}/candidates/${candidate.id}`, 'PUT', { name: name.trim(), description });
+    props.toast('Candidato actualizado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function deleteCandidate(electionId, candidate) {
+  if (!window.confirm(`¿Eliminar al candidato "${candidate.name}"?`)) return;
+  try {
+    await props.api(`/elections/${electionId}/candidates/${candidate.id}`, 'DELETE');
+    props.toast('Candidato eliminado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  }
+}
+
+async function changeUserRole(user, role) {
+  if (!window.confirm(`¿Cambiar el rol de "${user.name}" a ${role === 'admin' ? 'administrador' : 'votante'}?`)) return;
+  managingUserId.value = user.id;
+  try {
+    await props.api(`/users/${user.id}/role`, 'PATCH', { role });
+    props.toast('Rol actualizado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  } finally {
+    managingUserId.value = null;
+  }
+}
+
+async function toggleUserActive(user) {
+  const active = user.active === false;
+  if (!window.confirm(active ? `¿Activar la cuenta de "${user.name}"?` : `¿Desactivar la cuenta de "${user.name}"?`)) return;
+  managingUserId.value = user.id;
+  try {
+    await props.api(`/users/${user.id}/active`, 'PATCH', { active });
+    props.toast(active ? 'Cuenta activada' : 'Cuenta desactivada');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  } finally {
+    managingUserId.value = null;
+  }
+}
+
+async function deleteUser(user) {
+  if (!window.confirm(`¿Eliminar permanentemente la cuenta de "${user.name}"? Esta acción no se puede deshacer.`)) return;
+  managingUserId.value = user.id;
+  try {
+    await props.api(`/users/${user.id}`, 'DELETE');
+    props.toast('Usuario eliminado');
+    await load();
+  } catch (err) {
+    props.toast(err.message);
+  } finally {
+    managingUserId.value = null;
+  }
 }
 
 onMounted(() => {
@@ -250,126 +346,103 @@ watch(() => props.refreshKey, load);
     <form class="card" @submit.prevent="createElection">
       <h2>Nueva elección</h2>
       <label for="title">Título</label>
-      <input id="title" v-model="title" required maxlength="200">
+      <input id="title" v-model="title" required>
       <label for="description">Descripción</label>
       <textarea id="description" v-model="description" rows="2"></textarea>
-      <fieldset class="schedule-fields">
-        <legend>Calendario opcional</legend>
-        <p class="muted">Si defines fechas, la votación se abre y cierra automáticamente.</p>
-        <div class="date-grid">
-          <div>
-            <label for="new-starts-at">Inicio</label>
-            <input id="new-starts-at" v-model="startsAt" type="datetime-local">
-          </div>
-          <div>
-            <label for="new-ends-at">Cierre</label>
-            <input id="new-ends-at" v-model="endsAt" type="datetime-local">
-          </div>
+      <div class="row schedule-fields">
+        <div>
+          <label for="starts-at">Inicio</label>
+          <input id="starts-at" v-model="startsAt" type="datetime-local" required>
         </div>
-      </fieldset>
+        <div>
+          <label for="ends-at">Cierre</label>
+          <input id="ends-at" v-model="endsAt" type="datetime-local" required>
+        </div>
+      </div>
       <button type="submit" :disabled="creating">{{ creating ? 'Creando…' : 'Crear elección' }}</button>
     </form>
 
     <div v-if="error" class="card msg bad" role="alert">{{ error }}</div>
     <p v-if="loading && elections.length === 0" class="muted" role="status">Cargando elecciones…</p>
     <p v-else-if="!error && elections.length === 0" class="card empty-state">Aún no hay elecciones. Crea la primera desde el formulario.</p>
-
-    <section aria-labelledby="elections-heading">
-      <h2 id="elections-heading">Elecciones y participación</h2>
-      <article v-for="election in elections" :key="election.id" class="card admin-election election-card">
+    <article v-for="election in elections" :key="election.id" class="card election-card">
+      <div class="row between">
+        <h3 class="election-title">{{ election.title }}</h3>
+        <span class="badge" :class="election.status">{{ statusLabels[election.status] }}</span>
+      </div>
+      <form v-if="editingElectionId === election.id" class="card election-edit" @submit.prevent="saveElection(election.id)">
+        <label :for="`edit-title-${election.id}`">Título</label>
+        <input :id="`edit-title-${election.id}`" v-model="editTitle" required>
+        <label :for="`edit-description-${election.id}`">Descripción</label>
+        <textarea :id="`edit-description-${election.id}`" v-model="editDescription" rows="2"></textarea>
+        <div class="row schedule-fields">
+          <div><label :for="`edit-start-${election.id}`">Inicio</label><input :id="`edit-start-${election.id}`" v-model="editStartsAt" type="datetime-local" required></div>
+          <div><label :for="`edit-end-${election.id}`">Cierre</label><input :id="`edit-end-${election.id}`" v-model="editEndsAt" type="datetime-local" required></div>
+        </div>
+        <div class="row"><button type="submit">Guardar cambios</button><button type="button" class="ghost" @click="editingElectionId = null">Cancelar</button></div>
+      </form>
+      <template v-else>
+        <p v-if="election.description" class="muted">{{ election.description }}</p>
+        <p class="muted schedule-label"><b>Inicio:</b> {{ formatSchedule(election.starts_at) }}<br><b>Cierre:</b> {{ formatSchedule(election.ends_at) }}</p>
+      </template>
+      <div class="election-metrics muted">
+        <span>{{ election.total_candidates }} {{ election.total_candidates === 1 ? 'candidato' : 'candidatos' }}</span>
+        <span>{{ election.total_votes }} {{ election.total_votes === 1 ? 'voto emitido' : 'votos emitidos' }}</span>
+      </div>
+      <div class="participation-summary">
         <div class="row between">
-          <div>
-            <h3>{{ election.title }}</h3>
-            <p class="muted">{{ election.description }}</p>
-          </div>
-          <span class="badge" :class="election.status" :aria-label="`Estado: ${statusLabels[election.status]}`">
-            {{ statusLabels[election.status] }}
-          </span>
+          <span>{{ election.participation_count }} de {{ election.eligible_voters }} votantes participaron</span>
+          <strong>{{ election.participation_rate }}%</strong>
         </div>
-
-        <div class="participation-summary">
-          <div class="row between">
-            <span>{{ election.total_votes }} votos · {{ election.participation_count }} de {{ election.eligible_voters }} votantes participaron</span>
-            <strong>{{ election.participation_rate }}%</strong>
-          </div>
-          <div
-            class="participation-track"
-            role="progressbar"
-            :aria-label="`Participación de ${election.title}`"
-            :aria-valuenow="election.participation_rate"
-            aria-valuemin="0"
-            aria-valuemax="100"
-          >
-            <div :style="{ width: `${Math.min(election.participation_rate, 100)}%` }"></div>
-          </div>
-        </div>
-
-        <p v-if="election.starts_at" class="muted">
-          Inicio: {{ new Date(election.starts_at).toLocaleString() }}
-          <span v-if="election.ends_at"> · Cierre: {{ new Date(election.ends_at).toLocaleString() }}</span>
-        </p>
-
-        <form
-          v-if="election.status === 'draft' && election.total_votes === 0"
-          class="schedule-fields"
-          @submit.prevent="scheduleElection(election.id)"
+        <div
+          class="participation-track"
+          role="progressbar"
+          :aria-label="`Participación de ${election.title}`"
+          :aria-valuenow="election.participation_rate"
+          aria-valuemin="0"
+          aria-valuemax="100"
         >
-          <fieldset>
-            <legend>Programar fechas</legend>
-            <div class="date-grid">
-              <div>
-                <label :for="`starts-at-${election.id}`">Inicio</label>
-                <input
-                  :id="`starts-at-${election.id}`"
-                  v-model="scheduleDrafts[election.id].starts_at"
-                  type="datetime-local"
-                  required
-                >
-              </div>
-              <div>
-                <label :for="`ends-at-${election.id}`">Cierre</label>
-                <input
-                  :id="`ends-at-${election.id}`"
-                  v-model="scheduleDrafts[election.id].ends_at"
-                  type="datetime-local"
-                  required
-                >
-              </div>
-            </div>
-            <button type="submit" class="ghost">Guardar calendario</button>
-          </fieldset>
-        </form>
-
-        <form v-if="election.status === 'draft'" class="row candidate-form" @submit.prevent="addCandidate(election.id)">
-          <label class="sr-only" :for="`candidate-${election.id}`">Nombre del nuevo candidato</label>
-          <input
-            :id="`candidate-${election.id}`"
-            v-model="candidateNames[election.id]"
-            class="candidate-input"
-            placeholder="Nombre del candidato"
-            required
-            :aria-label="`Nombre del candidato para ${election.title}`"
-          >
-          <button type="submit" :disabled="addingCandidateId === election.id">
-            {{ addingCandidateId === election.id ? 'Agregando…' : '+ Candidato' }}
-          </button>
-        </form>
-
-        <div class="row status-actions">
-          <button
-            v-for="status in ['draft', 'open', 'closed'].filter((item) => (
-              item !== election.status && (!election.starts_at || item === 'closed')
-            ))"
-            :key="status"
-            :class="status === 'open' ? 'ok' : status === 'closed' ? 'danger' : 'ghost'"
-            :disabled="changingElectionId === election.id"
-            @click="changeStatus(election.id, status)"
-          >{{ status === 'open' ? 'Abrir elección' : status === 'closed' ? 'Cerrar elección' : 'Volver a borrador' }}</button>
-          <button class="ghost" @click="exportCsv(election)">Descargar CSV</button>
-          <button class="ghost" @click="exportPdf(election)">Imprimir / Guardar PDF</button>
+          <div :style="{ width: `${Math.min(election.participation_rate, 100)}%` }"></div>
         </div>
-      </article>
-    </section>
+      </div>
+      <div v-if="election.status === 'draft' && election.candidates?.length" class="candidate-list">
+        <div v-for="candidate in election.candidates" :key="candidate.id" class="row between candidate-row">
+          <span><b>{{ candidate.name }}</b><small v-if="candidate.description" class="muted"> — {{ candidate.description }}</small></span>
+          <div class="row">
+            <button type="button" class="ghost" @click="editCandidate(election.id, candidate)" :aria-label="`Editar ${candidate.name}`">Editar</button>
+            <button type="button" class="danger" @click="deleteCandidate(election.id, candidate)" :aria-label="`Eliminar ${candidate.name}`">Eliminar</button>
+          </div>
+        </div>
+      </div>
+      <form v-if="election.status === 'draft'" class="row" @submit.prevent="addCandidate(election.id)">
+        <input
+          v-model="candidateNames[election.id]"
+          class="candidate-input"
+          placeholder="Nombre del candidato"
+          required
+          :aria-label="`Nombre del candidato para ${election.title}`"
+        >
+        <button type="submit" :disabled="addingCandidateId === election.id">
+          {{ addingCandidateId === election.id ? 'Agregando…' : '+ Candidato' }}
+        </button>
+      </form>
+      <div v-if="election.status === 'draft'" class="row election-management">
+        <button class="ghost" type="button" @click="beginEdit(election)">Editar elección</button>
+        <button class="ghost" type="button" @click="duplicateElection(election)">Duplicar</button>
+        <button class="danger" type="button" @click="deleteElection(election)">Eliminar elección</button>
+      </div>
+      <div class="row status-actions">
+        <button
+          v-for="status in ['draft', 'open', 'closed'].filter((item) => item !== election.status)"
+          :key="status"
+          :class="status === 'open' ? 'ok' : status === 'closed' ? 'danger' : 'ghost'"
+          :disabled="changingElectionId === election.id"
+          @click="changeStatus(election.id, status)"
+        >{{ status === 'open' ? 'Abrir elección' : status === 'closed' ? 'Cerrar elección' : 'Volver a borrador' }}</button>
+        <button type="button" class="ghost" @click="exportCsv(election)">Descargar CSV</button>
+        <button type="button" class="ghost" @click="exportPdf(election)">Imprimir / Guardar PDF</button>
+      </div>
+    </article>
 
     <section v-if="printElection" id="print-report" class="print-report" aria-label="Reporte de resultados">
       <h1>Resultados: {{ printElection.title }}</h1>
@@ -391,6 +464,51 @@ watch(() => props.refreshKey, load);
         </tbody>
       </table>
       <p>Generado: {{ new Date().toLocaleString() }}</p>
+    </section>
+
+    <section class="card user-management">
+      <h2>Administración de usuarios</h2>
+      <div class="row user-filters">
+        <input v-model="userSearch" type="search" placeholder="Buscar por nombre o correo" aria-label="Buscar usuarios">
+        <select v-model="userRoleFilter" aria-label="Filtrar por rol">
+          <option value="all">Todos los roles</option>
+          <option value="voter">Votantes</option>
+          <option value="admin">Administradores</option>
+        </select>
+        <select v-model="userStatusFilter" aria-label="Filtrar por estado">
+          <option value="all">Todos los estados</option>
+          <option value="active">Activas</option>
+          <option value="inactive">Desactivadas</option>
+        </select>
+      </div>
+      <p v-if="!loading && filteredUsers.length === 0" class="muted">No hay usuarios que coincidan con los filtros.</p>
+      <div v-for="user in filteredUsers" :key="user.id" class="user-row">
+        <div class="user-info">
+          <b>{{ user.name }}</b>
+          <span class="muted">{{ user.email }}</span>
+        </div>
+        <div class="row user-actions">
+          <select
+            :value="user.role"
+            :disabled="managingUserId === user.id || user.id === session.user.id"
+            :aria-label="`Rol de ${user.name}`"
+            @change="changeUserRole(user, $event.target.value)"
+          >
+            <option value="voter">Votante</option>
+            <option value="admin">Administrador</option>
+          </select>
+          <button
+            class="ghost"
+            :disabled="managingUserId === user.id || user.id === session.user.id"
+            @click="toggleUserActive(user)"
+          >{{ user.active === false ? 'Activar' : 'Desactivar' }}</button>
+          <button
+            class="danger"
+            :disabled="managingUserId === user.id || user.id === session.user.id"
+            @click="deleteUser(user)"
+          >Eliminar</button>
+        </div>
+      </div>
     </section>
   </template>
 </template>
@@ -435,30 +553,15 @@ watch(() => props.refreshKey, load);
   overflow-wrap: anywhere;
 }
 
-.schedule-fields {
-  margin: 16px 0;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+.election-title {
+  margin-right: 12px;
 }
 
-.schedule-fields legend {
-  padding: 0 6px;
-  font-weight: 600;
-}
-
-.schedule-fields p {
-  margin-bottom: 10px;
-}
-
-.date-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.date-grid input {
-  margin-bottom: 8px;
+.election-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 12px 0;
 }
 
 .participation-summary {
@@ -478,23 +581,6 @@ watch(() => props.refreshKey, load);
   background: var(--brand);
 }
 
-.empty-state {
-  color: var(--muted);
-}
-
-.candidate-form {
-  margin-top: 12px;
-}
-
-.candidate-input {
-  flex: 1;
-  margin: 0;
-}
-
-.status-actions {
-  margin-top: 10px;
-}
-
 .print-report {
   display: none;
 }
@@ -511,18 +597,102 @@ watch(() => props.refreshKey, load);
   text-align: left;
 }
 
-@media (max-width: 600px) {
-  .date-grid {
-    grid-template-columns: 1fr;
-  }
+.empty-state {
+  color: var(--muted);
+}
 
+.candidate-input {
+  flex: 1;
+  margin: 0;
+}
+
+.status-actions {
+  margin-top: 10px;
+}
+
+.election-edit {
+  margin: 12px 0;
+  box-shadow: none;
+}
+
+.election-management {
+  margin-top: 12px;
+}
+
+.candidate-list {
+  margin-bottom: 10px;
+}
+
+.candidate-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.user-management {
+  margin-top: 18px;
+}
+
+.user-filters {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.user-filters input {
+  flex: 1;
+}
+
+.user-filters select {
+  width: auto;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.user-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.user-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-actions {
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.schedule-fields {
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.schedule-fields > div {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .status-actions > button,
-  .candidate-form > button {
-    flex: 1 1 100%;
+  .user-row,
+  .user-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .user-filters select,
+  .user-actions select {
+    width: 100%;
   }
 }
 

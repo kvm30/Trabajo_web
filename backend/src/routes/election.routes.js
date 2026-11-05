@@ -21,12 +21,12 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [title]
+ *             required: [title, starts_at, ends_at]
  *             properties:
  *               title: { type: string, example: Elección de representante 2026 }
  *               description: { type: string }
- *               starts_at: { type: string, format: date-time }
- *               ends_at: { type: string, format: date-time }
+ *               starts_at: { type: string, format: date-time, description: Apertura automática }
+ *               ends_at: { type: string, format: date-time, description: Cierre automático }
  *     responses:
  *       201: { description: Creada }
  */
@@ -72,6 +72,9 @@ router.patch('/:id/schedule', auth, admin, C.setSchedule);
  *       404: { description: No encontrada }
  */
 router.get('/:id', C.getById);
+router.put('/:id', auth, admin, C.update);
+router.delete('/:id', auth, admin, C.remove);
+router.post('/:id/duplicate', auth, admin, C.duplicate);
 
 /**
  * @swagger
@@ -96,6 +99,8 @@ router.get('/:id', C.getById);
  *       201: { description: Candidato creado }
  */
 router.post('/:id/candidates', auth, admin, C.addCandidate);
+router.put('/:id/candidates/:candidateId', auth, admin, C.updateCandidate);
+router.delete('/:id/candidates/:candidateId', auth, admin, C.removeCandidate);
 
 /**
  * @swagger
