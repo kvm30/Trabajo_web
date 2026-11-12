@@ -12,22 +12,18 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: backweb-db
+          property: connectionString
       - key: ADMIN_EMAIL
-        value: admin@votacion.com
+        sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: APP_URL
-        sync: false
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        sync: false
-      - key: SMTP_SECURE
-        value: "false"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_FROM
-        sync: false
+        value: https://votos.com
+
+databases:
+  - name: backweb-db
+    databaseName: backweb_db
+    user: backweb_user
+    plan: basic-256mb

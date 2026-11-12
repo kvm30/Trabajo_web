@@ -98,12 +98,14 @@ El panel también muestra una bitácora de cambios administrativos que no almace
 
 ## Publicar para acceder desde Internet
 
-El archivo [`render.yaml`](./render.yaml) configura el despliegue del frontend, el backend y una base de datos PostgreSQL en Render.
+El archivo [`render.yaml`](./render.yaml) configura el despliegue del frontend, el backend y una base de datos PostgreSQL en Render. El servicio web usa el plan gratuito y puede tardar en responder después de un periodo sin actividad; la base de datos `basic-256mb` es de pago.
 
 1. Sube este repositorio a GitHub y crea una cuenta en [Render](https://render.com/).
-2. En Render, crea un **Blueprint** y conecta el repositorio.
-3. Cuando Render lo solicite, define `ADMIN_PASSWORD` con una contraseña segura para la cuenta administradora.
-4. Confirma la creación de los recursos. La base de datos definida usa el plan `basic-256mb`, que es de pago.
-5. Al terminar el despliegue, abre la URL pública del servicio. Esa misma dirección funciona desde celulares y computadoras con acceso a Internet.
+2. En Render, crea un **Blueprint** y conecta el repositorio. Render creará el servicio web y la base PostgreSQL enlazada automáticamente.
+3. Cuando Render lo solicite, define `ADMIN_EMAIL` y `ADMIN_PASSWORD` para la cuenta administradora. Render genera `JWT_SECRET` y conecta `DATABASE_URL`.
+4. Confirma la creación de los recursos y el cargo del plan de base de datos `basic-256mb`.
+5. Cuando el servicio esté desplegado, añade `votos.com` como dominio personalizado en la configuración del servicio de Render.
+6. En Cloudflare, crea los registros DNS que Render indique para el dominio. Desactiva temporalmente el proxy de Cloudflare (nube naranja) mientras Render valida el dominio; después puedes volver a activarlo si la configuración lo permite.
+7. Configura `APP_URL` con la URL pública final (`https://votos.com`) y vuelve a desplegar si Render lo solicita. Esa dirección funciona desde celulares y computadoras con acceso a Internet.
 
-Render configura el puerto, las credenciales de PostgreSQL y el secreto de sesión automáticamente. No publiques el archivo `backend/.env` ni compartas las credenciales de administrador. Para conservar los votos, mantén activa la base de datos de pago; no la elimines desde Render.
+Render configura el puerto, las credenciales de PostgreSQL y el secreto de sesión automáticamente. SMTP es opcional; sin SMTP no se envían correos de invitación, restablecimiento ni avisos. No publiques el archivo `backend/.env` ni compartas las credenciales de administrador. Para conservar los votos, mantén activa la base de datos de pago; no la elimines desde Render.
