@@ -10,6 +10,7 @@ const NotificationModel = require('./models/notification.model');
 const socket = require('./socket');
 
 const app = express();
+app.set('trust proxy', true);
 const server = http.createServer(app);
 const PORT = Number(process.env.PORT || 3000);
 

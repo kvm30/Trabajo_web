@@ -59,6 +59,15 @@ El panel administrador permite programar fechas de inicio y cierre; el backend c
 
 2. En esa computadora, ejecuta `ipconfig` y busca la dirección **IPv4** del adaptador Wi-Fi activo (por ejemplo, `192.168.1.25`).
 3. Desde el teléfono u otro dispositivo conectado a la misma red, abre `http://<IPv4-de-la-computadora>:5173` (por ejemplo, `http://192.168.1.25:5173`). No uses `localhost` en el otro dispositivo: esa dirección apuntaría al propio teléfono.
+4. Si quieres fijar la URL del backend para desarrollo, crea un archivo `frontend/.env` con:
+
+   ```env
+   VITE_HOST=0.0.0.0
+   VITE_PORT=5173
+   VITE_API_URL=http://192.168.1.25:3000
+   ```
+
+   Esto hace que el proxy de Vite apunte al backend correcto cuando accedes desde la red local o desde otra máquina.
 
 Vite y el backend escuchan en la red local; las solicitudes de API y Socket.IO se redirigen al backend automáticamente. Si Windows muestra una alerta de Firewall al iniciar Node.js, permite el acceso en redes **privadas**. Comprueba que ambos dispositivos estén en la misma red y que el router no tenga activado el aislamiento entre dispositivos. Para la versión compilada (`npm run build` y `npm start`), usa `http://<IPv4-de-la-computadora>:3000` en lugar del puerto 5173. Esto permite acceso en la red local; no publica el sitio en Internet.
 
