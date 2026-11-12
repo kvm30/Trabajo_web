@@ -9,7 +9,9 @@ if (process.env.DATABASE_URL) {
   }
   poolConfig = {
     connectionString: databaseUrl.toString(),
-    ssl: { rejectUnauthorized: true },
+    ssl: {
+      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+    },
   };
 } else {
   poolConfig = {
